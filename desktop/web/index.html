@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kiaro Unlimited-OCR</title><link rel="stylesheet" href="style.css"><script type="module" src="app.js"></script></head>
+<body>
+<header class="topbar">
+  <div class="identity"><div class="wordmark">Kiaro <span>Unlimited-OCR</span></div><div class="subtitle">DOCUMENT WORKSPACE <span class="dot"></span> ORIGINAL BF16 · LOCAL CUDA</div></div>
+  <div class="metrics"><div><strong id="done">0<span>/0</span></strong><small>pages saved</small></div><div><strong id="elapsed">—</strong><small>elapsed</small></div><div class="engine"><strong>CUDA</strong><small>original model</small></div></div>
+  <div class="top-actions"><button id="open" class="quiet" title="Open a PDF or image (Ctrl+O)"><span aria-hidden="true">＋</span> Open document</button><button id="start" class="primary" disabled>Start OCR <span aria-hidden="true">↗</span></button><button id="cancel" disabled>Stop</button></div>
+</header>
+<section class="configuration" aria-label="Processing settings">
+  <label class="range-field"><span>Pages</span><input id="selection" placeholder="All pages · or 1,3,10–20" spellcheck="false" aria-describedby="range-hint"></label>
+  <span id="range-hint" class="hint">Persian digits accepted</span>
+  <label class="mode-field"><span>Mode</span><select id="mode"><option value="base">Base · 1024</option><option value="gundam">Gundam · tiled</option></select></label>
+  <div class="local-tag"><i></i> On-device processing</div>
+</section>
+<main>
+  <section class="source-panel" aria-label="Source document">
+    <div class="panel-toolbar"><div class="panel-name"><span class="eyebrow">01 / SOURCE</span><input id="filename" aria-label="Document path" placeholder="Paste a path or open a document" spellcheck="false"></div><div class="page-controls"><button id="previous" aria-label="Previous source page" disabled>‹</button><label><input id="page" type="number" min="1" value="1" disabled aria-label="Source page"><span id="page-total">/ —</span></label><button id="next" aria-label="Next source page" disabled>›</button></div></div>
+    <div class="paper-stage" id="paper-stage"><div class="empty" id="source-empty"><div class="document-glyph" aria-hidden="true"><span></span><span></span><span></span></div><h1>Your document, in focus.</h1><p>Open a PDF or image to get started.<br>Your files stay on this device.</p><button id="empty-open" class="quiet">Choose a document</button><kbd>Ctrl O</kbd></div><img id="preview" alt="Selected source page" hidden></div>
+    <div class="panel-footer"><span id="source-caption">PDF · PNG · JPG · WEBP · TIFF</span><span>Original preserved</span></div>
+  </section>
+  <section class="text-panel" aria-label="Recognized text">
+    <div class="panel-toolbar"><div class="panel-name"><span class="eyebrow">02 / RECOGNIZED TEXT</span><span id="text-caption">Ready when you are</span></div><div class="text-actions"><span id="live" class="live" hidden><i></i> LIVE</span><button id="copy" class="icon-button" disabled aria-label="Copy recognized text" title="Copy text">Copy</button></div></div>
+    <div id="text-empty" class="empty text-empty"><span class="text-mark" aria-hidden="true">Aa</span><h2>From page to possibility.</h2><p>Recognized text appears here as it is generated.<br>Choose your pages and mode, then start OCR.</p><div class="language-tags"><span>Unicode</span><span>RTL support</span><span>UTF-8 export</span></div></div>
+    <pre id="recognized" dir="auto" tabindex="0" aria-label="Live recognized text" hidden></pre>
+    <div class="panel-footer"><span id="characters">0 characters</span><span>Review before use</span></div>
+  </section>
+</main>
+<footer class="run-footer"><div class="status-line"><span id="state-pill" class="state-pill">Ready</span><span id="status" role="status" aria-live="polite">Open a document to begin.</span><button id="results" class="text-link" disabled>Open saved results ↗</button><strong id="percent">0%</strong></div><progress id="progress" value="0" max="100" aria-label="Completed selected pages"></progress><div class="footer-note"><span>Completed pages are saved automatically. Stopping keeps your progress.</span><span>KiaroSama · v0.1.0</span></div></footer>
+</body></html>

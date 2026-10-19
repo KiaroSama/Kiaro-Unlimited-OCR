@@ -1,0 +1,4 @@
+# Model-specific compatibility overrides only; shared CUDA dependencies are reused.
+transformers==4.57.6
+huggingface-hub==0.36.2
+tokenizers==0.22.2

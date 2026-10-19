@@ -1,0 +1,43 @@
+name: Source checks
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      CARGO_BUILD_JOBS: 2
+      PYTHONUTF8: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - name: Install portable test dependencies
+        run: python -m pip install PyMuPDF==2.0 Pillow==13.0.0
+      - name: Frontend compile
+        run: |
+          npm --prefix desktop/web ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm --prefix desktop/web run build
+          exit $LASTEXITCODE
+      - name: Python contracts and UTF-8
+        run: |
+          python -I -X utf8 scripts/test_workflow.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -I -X utf8 scripts/test_desktop.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -I -X utf8 scripts/check_source.py
+          exit $LASTEXITCODE
+      - name: Rust format and unit contracts
+        run: |
+          rustup update stable --no-self-update
+          cargo fmt --manifest-path desktop/Cargo.toml --check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path desktop/Cargo.toml -j 2
+          exit $LASTEXITCODE

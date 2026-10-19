@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /desktop
+    schedule:
+      interval: daily
+    groups:
+      rust-dependencies:
+        patterns: ['*']
+  - package-ecosystem: npm
+    directory: /desktop/web
+    schedule:
+      interval: daily
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: daily
+    ignore:
+      - dependency-name: transformers
+        versions: ['>=5']
+      - dependency-name: huggingface-hub
+        versions: ['>=1']
+      - dependency-name: tokenizers
+        versions: ['>=0.23']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily

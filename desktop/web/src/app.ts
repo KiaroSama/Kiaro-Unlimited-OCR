@@ -1,0 +1,118 @@
+import { invoke, type DocumentInfo, type Snapshot } from './bridge.js';
+const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const button = (id: string) => element<HTMLButtonElement>(id);
+const input = (id: string) => element<HTMLInputElement>(id);
+let documentInfo: DocumentInfo | null = null;
+let busy = false;
+let polling = false;
+let currentText = '';
+let autoPage = 0;
+let previewRequest = 0;
+const status = (message: string, error = false) => {
+  element('status').textContent = message;
+  document.body.classList.toggle('error', error);
+  element('state-pill').classList.toggle('error', error);
+  if (error) element('state-pill').textContent = 'Attention';
+};
+const setBusy = (value: boolean) => {
+  busy = value;
+  document.body.classList.toggle('busy', value);
+  for (const id of ['open', 'empty-open', 'selection', 'mode', 'filename']) (element(id) as HTMLInputElement).disabled = value;
+  button('start').disabled = value || !documentInfo;
+  button('cancel').disabled = !value;
+  element('live').hidden = !value;
+};
+const displaySource = (value: DocumentInfo) => {
+  documentInfo = value;
+  const image = element<HTMLImageElement>('preview');
+  image.src = value.image;
+  image.hidden = false;
+  element('source-empty').hidden = true;
+  input('filename').value = value.path;
+  input('filename').title = value.path;
+  input('page').value = String(value.page);
+  input('page').max = String(value.total);
+  input('page').disabled = false;
+  element('page-total').textContent = `/ ${value.total}`;
+  element('source-caption').textContent = `Source page ${value.page} of ${value.total}`;
+  button('previous').disabled = value.page <= 1;
+  button('next').disabled = value.page >= value.total;
+  button('start').disabled = busy;
+};
+const preview = async (page: number) => {
+  if (!documentInfo || !Number.isInteger(page) || page < 1 || page > documentInfo.total) return;
+  const request = ++previewRequest;
+  try { const value = await invoke<DocumentInfo>('preview_page', {page}); if (request === previewRequest) displaySource(value); }
+  catch (error) { status(String(error), true); }
+};
+const choose = async () => {
+  if (busy) return;
+  try {
+    const value = await invoke<DocumentInfo | null>('choose_document');
+    if (value) { displaySource(value); status(`${value.total} source pages · choose pages and start OCR.`); element('state-pill').textContent = 'Ready'; }
+  } catch (error) { status(String(error), true); }
+};
+const displayText = (text: string) => {
+  if (currentText === text) return;
+  currentText = text;
+  const target = element('recognized');
+  const follow = target.scrollHeight - target.scrollTop - target.clientHeight < 65;
+  target.textContent = text;
+  target.hidden = !text;
+  element('text-empty').hidden = !!text;
+  element('characters').textContent = `${text.length.toLocaleString()} characters`;
+  button('copy').disabled = !text;
+  if (follow) target.scrollTop = target.scrollHeight;
+};
+const update = (value: Snapshot) => {
+  setBusy(value.active);
+  const meta = value.metadata;
+  const count = meta.completed_pages.length;
+  const total = meta.selected_pages.length;
+  element('done').textContent = `${count}/${total}`;
+  element('elapsed').textContent = value.output ? `${value.seconds}s` : '—';
+  element('percent').textContent = `${meta.percent}%`;
+  const progress = element<HTMLProgressElement>('progress');
+  if (value.active && meta.status === 'loading') progress.removeAttribute('value');
+  else progress.value = meta.percent;
+  element('state-pill').textContent = meta.status.charAt(0).toUpperCase() + meta.status.slice(1);
+  if (value.output) {
+    status(meta.status === 'loading' ? 'Loading original CUDA model · saved progress is preserved.' : `${count}/${total} pages saved${meta.current_page ? ` · source page ${meta.current_page}` : ''} · ${meta.status}`, meta.status === 'failed');
+    button('results').disabled = false;
+    element('text-caption').textContent = meta.current_page ? `Page ${meta.current_page} · ${value.active ? 'live recognition' : meta.status}` : 'Waiting for generation';
+  }
+  displayText(value.text);
+  if (meta.current_page && autoPage !== meta.current_page) { autoPage = meta.current_page; void preview(autoPage); }
+};
+const poll = async () => {
+  if (polling) return;
+  polling = true;
+  try { update(await invoke<Snapshot>('poll_run')); }
+  catch (error) { status(String(error), true); }
+  finally { polling = false; if (busy) window.setTimeout(() => void poll(), 400); }
+};
+input('filename').onkeydown = async event => {
+  if (event.key !== 'Enter' || busy) return;
+  try { displaySource(await invoke<DocumentInfo>('open_document', {path: input('filename').value.trim().replace(/^\"|\"$/g, '')})); status('Document loaded. Choose pages and start OCR.'); }
+  catch (error) { status(String(error), true); }
+};
+button('open').onclick = choose;
+button('empty-open').onclick = choose;
+button('previous').onclick = () => void preview(Number(input('page').value) - 1);
+button('next').onclick = () => void preview(Number(input('page').value) + 1);
+input('page').onchange = () => void preview(Number(input('page').value));
+button('start').onclick = async () => {
+  if (busy || !documentInfo) return;
+  setBusy(true); autoPage = 0; displayText('');
+  try {
+    update(await invoke<Snapshot>('start_run', {selection: input('selection').value, mode: element<HTMLSelectElement>('mode').value}));
+    void poll();
+  } catch (error) { setBusy(false); status(String(error), true); }
+};
+button('cancel').onclick = async () => {
+  try { await invoke('cancel_run'); button('cancel').disabled = true; status('Stopping at the next generation boundary · completed and partial text stay saved.'); }
+  catch (error) { status(String(error), true); }
+};
+button('results').onclick = async () => { try { await invoke('open_results'); } catch (error) { status(String(error), true); } };
+button('copy').onclick = async () => { try { await navigator.clipboard.writeText(currentText); status('Recognized text copied.'); } catch (error) { status(`Cannot copy: ${error}`, true); } };
+document.addEventListener('keydown', event => { if (event.ctrlKey && event.key.toLowerCase() === 'o') {event.preventDefault(); void choose();} });
