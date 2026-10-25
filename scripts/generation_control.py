@@ -7,6 +7,10 @@ from layout_blocks import split_pages
 from run_storage import atomic_text
 
 
+class TokenLimitError(RuntimeError):
+    """Generation exhausted context without completing the document."""
+
+
 class GenerationControl:
     def __init__(self, model, tokenizer, store):
         self.model, self.tokenizer, self.store = model, tokenizer, store
@@ -95,7 +99,7 @@ class GenerationControl:
             kwargs['stopping_criteria'] = StoppingCriteriaList(criteria + [Stop()])
             result = owner.original(*args, **kwargs)
             if not owner.stop_requested() and int(result[0, -1]) != owner.tokenizer.eos_token_id:
-                raise RuntimeError('Generation reached its token limit without EOS; partial output preserved, page not complete.')
+                raise TokenLimitError('Generation reached its token limit without EOS; partial output preserved, page not complete.')
             return result
 
         self.model.generate = generate

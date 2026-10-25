@@ -235,16 +235,20 @@ def main() -> int:
     parser.add_argument("input", nargs="?", type=Path, help="Local image or PDF path")
     parser.add_argument("--mode", choices=("base", "gundam"), default="base")
     parser.add_argument("--pages", type=int, default=0, help="PDF page limit; 0 means all")
-    parser.add_argument("--max-length", type=int, default=8192, help="Total context tokens, up to 32768")
+    parser.add_argument("--max-length", type=int, default=None, help="Total context tokens: default 8192, automatic multi-page 32768")
     parser.add_argument("--check", action="store_true", help="Check local model and CUDA without loading weights")
     parser.add_argument("--page-selection", default="", help="PDF pages, e.g. 1,3,10-20; empty means all")
     parser.add_argument("--run-dir", type=Path, help="New project-local output directory for UI worker")
     parser.add_argument('--resume-dir', type=Path, help='Existing matching job inside project outputs')
     parser.add_argument('--processing', choices=('pagewise', 'multi'), default='pagewise')
-    parser.add_argument('--chunk-size', type=int, default=2, choices=(1, 2))
+    parser.add_argument('--chunk-size', type=int, default=0, choices=range(33), help='Multi-page ceiling: 0 selects context/VRAM-aware groups')
     parser.add_argument('--turbo', action='store_true', help='Runtime CUDA batching without changing model weights')
     parser.add_argument('--fresh', action='store_true', help='Start a new run without replacing saved output')
     args = parser.parse_args()
+    if args.max_length is None:
+        args.max_length = 32768 if args.processing == 'multi' and args.chunk_size == 0 else 8192
+    if args.processing == 'pagewise':
+        args.chunk_size = 2
     if args.pages < 0 or not 1024 <= args.max_length <= 32768:
         parser.error("--pages must be >= 0; --max-length must be 1024..32768")
     if not args.input and not args.check:
@@ -274,7 +278,7 @@ def main() -> int:
             raise ValueError('Multi-page processing requires a PDF in Base mode.')
         job = identity(source, selected, args.mode, args.max_length)
         if args.processing != 'pagewise' or args.turbo:
-            job.update(processing=args.processing, chunk_size=args.chunk_size, turbo=args.turbo)
+            job.update(processing=args.processing, chunk_size=args.chunk_size if args.processing == 'multi' else 2, turbo=args.turbo)
         ownership = JobLock(ROOT, job)
         ownership.__enter__()
         resume = args.resume_dir.resolve() if args.resume_dir and not args.fresh else (None if args.run_dir or args.fresh else find_run(ROOT, job))

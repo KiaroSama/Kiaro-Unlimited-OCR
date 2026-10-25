@@ -82,7 +82,7 @@ const update = (value: Snapshot) => {
     element('text-caption').textContent = meta.current_page ? `Page ${meta.current_page} · ${value.active ? 'live recognition' : meta.status}` : 'Waiting for generation';
   }
   const pages = value.document?.pages || [];
-  displayText(pages.length ? pages.map(p => `### Page ${p.page}\n\n${p.blocks?.length ? p.blocks.map(b=>(b.label==='title'?'## ':b.label==='sub_title'?'### ':'')+b.text).join('\n\n') : p.text}`).join('\n\n---\n\n') : value.text);
+  displayText(pages.length ? pages.map(p => `###### Page ${p.page}\n\n${p.blocks?.length ? p.blocks.map(b=>(b.label==='title'?'## ':b.label==='sub_title'?'### ':'')+b.text).join('\n\n') : p.text}`).join('\n\n---\n\n') : value.text);
   updateBoxes(pages);
   const metrics = value.document?.metrics;
   element('tokens').textContent = String(metrics?.tokens || 0);

@@ -56,9 +56,10 @@ def main() -> int:
             from recovery import identity, find_run
             from page_selection import parse_pages
             info = inspect_document(args.source)
-            job = identity(Path(info['path']), parse_pages(args.selection, info['total']), args.mode, 8192)
+            job = identity(Path(info['path']), parse_pages(args.selection, info['total']), args.mode,
+                           32768 if args.processing == 'multi' else 8192)
             if args.processing != 'pagewise' or args.turbo:
-                job.update(processing=args.processing, chunk_size=2, turbo=args.turbo)
+                job.update(processing=args.processing, chunk_size=0 if args.processing == 'multi' else 2, turbo=args.turbo)
             found = find_run(Path(__file__).resolve().parents[1], job)
             result = {'resume': str(found) if found else None}
         else:

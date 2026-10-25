@@ -66,9 +66,12 @@ a small image cache is retained. Page ranges, Base/Gundam and Stop/save remain a
 - **Pause / Resume** holds the current generation in GPU memory; Space toggles it outside inputs.
   Stop also cancels a paused run. Closing/restarting the app resumes by page checkpoint, not token.
 - **Restart** explicitly starts a fresh output directory; **Start** may resume matching saved work.
-- **Reading** selects page-by-page recovery or Base-only PDF chunks of up to two pages. Multi-page
-  output must contain each selected page and end normally; malformed/truncated output fails safely.
-  Previously committed pages survive cancellation/OOM. Chunk mode is not unlimited one-shot context.
+- **Reading** selects page-by-page recovery or Base-only PDF automatic groups. Group size uses
+  available VRAM and the total context budget, rather than a fixed two-page cap. Capacity failures
+  split a group and retry; an impossible single page fails explicitly. Malformed page markers are
+  rejected. Previously committed pages survive cancellation/OOM; this is not unlimited one-shot context.
+  Automatic multi-page uses32768total tokens; pagewise keeps8192. Changed settings create a new job;
+  older explicit two-page jobs can resume through the Python CLI with `--chunk-size 2 --max-length 8192`.
 - **Turbo** batches selected MoE expert operations on CUDA at runtime. Original BF16 weights and
   downloaded model source remain unchanged; this is not quantization or a different checkpoint.
 - The collapsible monitor shows actual CPU/RAM/NVIDIA usage and recent detected blocks. Missing
@@ -79,7 +82,10 @@ runtime. A short warmed32token comparison measured4.91s baseline versus3.85s Tur
 text; it is not a full-document speed guarantee. A real2page Turbo chunk completed at11.1tokens/s
 with6938.7MiB peak allocation. The full public page retained the baseline recognized text;
 a few layout coordinates differed by1–2/1000 under BF16 batching. Model load is reported
-separately; no263tokens/s claim is made.
+separately; no263tokens/s claim is made. Automatic grouping was additionally verified on three
+actual pages in one CUDA generation:2149tokens,171.8s active decode (12.5tokens/s),7155.7MiB peak.
+GPU-indexed packed experts and an incremental repetition-cache candidate were measured and rejected
+because they were slower; neither experimental path is shipped.
 
 ## Run
 

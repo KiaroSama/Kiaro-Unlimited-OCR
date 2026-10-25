@@ -15,7 +15,7 @@ try {
     $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
     $env:CARGO_BUILD_JOBS = '2'
-    Write-Event 'Starting desktop build version=0.3.0'
+    Write-Event 'Starting desktop build version=0.3.1'
     if (-not $SkipCompile) {
         & npm --prefix (Join-Path $root 'desktop/web') ci --ignore-scripts --no-audit --no-fund
         if ($LASTEXITCODE) { throw 'Frontend dependency installation failed.' }
