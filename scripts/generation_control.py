@@ -1,7 +1,10 @@
-"""Narrow runtime generation adapter: live text, cancellation and valid single-batch mask."""
+"""Token-boundary pause/cancel and bounded live document telemetry."""
+import json
 import signal
 import time
-from pathlib import Path
+
+from layout_blocks import split_pages
+from run_storage import atomic_text
 
 
 class GenerationControl:
@@ -10,30 +13,70 @@ class GenerationControl:
         self.original = model.generate
         self.cancelled = False
         self.page = 0
-        self.tokens: list[int] = []
+        self.pages = []
+        self.tokens = []
         self.first = True
         self.last_write = 0.0
         self.old_handler = None
+        self.decode_started = None
+        self.paused_seconds = 0.0
+        self.prior_tokens = 0
+        self.prior_decode = 0.0
+        self.paused = False
+        self.decode_finished = None
+        from runtime_metrics import Monitor
+        self.monitor = Monitor()
 
-    def stop_requested(self) -> bool:
-        return self.cancelled or (self.store.directory / "cancel.request").exists()
+    def stop_requested(self):
+        return self.cancelled or (self.store.directory / 'cancel.request').exists()
 
-    def put(self, value) -> None:
+    def boundary(self):
+        pause = self.store.directory / 'pause.request'
+        if pause.exists() and not self.stop_requested():
+            start = time.monotonic()
+            self.paused_at = start
+            self.paused = True
+            self.flush()
+            while pause.exists() and not self.stop_requested():
+                time.sleep(0.05)
+            self.paused_seconds += time.monotonic() - start
+            self.paused = False
+            self.flush()
+        return self.stop_requested()
+
+    def put(self, value):
         if self.first:
             self.first = False
             return
+        if self.decode_started is None:
+            self.decode_started = time.monotonic()
         self.tokens.extend(value.reshape(-1).tolist())
         now = time.monotonic()
         if now - self.last_write >= 0.4:
             self.flush()
             self.last_write = now
 
-    def flush(self) -> None:
-        if self.tokens:
-            text = self.tokenizer.decode(self.tokens, skip_special_tokens=False)
-            self.store.partial(self.page, text)
+    def statistics(self):
+        now = self.paused_at if self.paused else (self.decode_finished or time.monotonic())
+        seconds = max(0, now - self.decode_started - self.paused_seconds) if self.decode_started else 0
+        count = self.prior_tokens + len(self.tokens)
+        elapsed = self.prior_decode + seconds
+        return {'tokens': count, 'decode_seconds': round(elapsed, 3),
+                'tokens_per_second': round(count / elapsed, 1) if elapsed else 0,
+                'paused': self.paused, 'phase': 'paused' if self.paused else 'reading'}
 
-    def end(self) -> None:
+    def flush(self):
+        if not self.pages:
+            return
+        raw = self.tokenizer.decode(self.tokens, skip_special_tokens=False) if self.tokens else ''
+        pages = split_pages(raw, self.pages)
+        if len(self.pages) == 1:
+            self.store.partial(self.page, raw)
+        data = {**self.statistics(), 'pages': pages, 'monitor': self.monitor.read()}
+        atomic_text(self.store.directory / 'stream.json', json.dumps(data, ensure_ascii=False))
+
+    def end(self):
+        self.decode_finished = time.monotonic()
         self.flush()
 
     def __enter__(self):
@@ -43,24 +86,34 @@ class GenerationControl:
 
         class Stop(StoppingCriteria):
             def __call__(self, input_ids, scores, **kwargs):
-                return owner.stop_requested()
+                return owner.boundary()
 
         def generate(*args, **kwargs):
-            kwargs["attention_mask"] = torch.ones_like(kwargs["input_ids"])
-            kwargs["streamer"] = owner
-            criteria = list(kwargs.get("stopping_criteria") or [])
-            kwargs["stopping_criteria"] = StoppingCriteriaList(criteria + [Stop()])
-            return owner.original(*args, **kwargs)
+            kwargs['attention_mask'] = torch.ones_like(kwargs['input_ids'])
+            kwargs['streamer'] = owner
+            criteria = list(kwargs.get('stopping_criteria') or [])
+            kwargs['stopping_criteria'] = StoppingCriteriaList(criteria + [Stop()])
+            result = owner.original(*args, **kwargs)
+            if not owner.stop_requested() and int(result[0, -1]) != owner.tokenizer.eos_token_id:
+                raise RuntimeError('Generation reached its token limit without EOS; partial output preserved, page not complete.')
+            return result
 
         self.model.generate = generate
         self.old_handler = signal.getsignal(signal.SIGINT)
-        signal.signal(signal.SIGINT, lambda *_: setattr(self, "cancelled", True))
+        signal.signal(signal.SIGINT, lambda *_: setattr(self, 'cancelled', True))
         return self
 
-    def reset(self, page: int) -> None:
-        self.page, self.tokens, self.first, self.last_write = page, [], True, 0.0
+    def reset(self, page):
+        stats = self.statistics()
+        self.prior_tokens, self.prior_decode = stats['tokens'], stats['decode_seconds']
+        self.pages = page if isinstance(page, list) else [page]
+        self.page = self.pages[0]
+        self.tokens, self.first, self.last_write = [], True, 0.0
+        self.decode_started, self.paused_seconds, self.decode_finished = None, 0.0, None
+        self.flush()
 
     def __exit__(self, *_):
         self.model.generate = self.original
         signal.signal(signal.SIGINT, self.old_handler)
+        self.monitor.close()
         self.flush()

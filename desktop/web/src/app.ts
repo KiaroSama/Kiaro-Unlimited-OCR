@@ -1,5 +1,6 @@
 import { invoke, type DocumentInfo, type Snapshot } from './bridge.js';
 import { renderMarkdown } from './markdown.js';
+import { loadPages, showPage, updateBoxes } from './source_pages.js';
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const button = (id: string) => element<HTMLButtonElement>(id);
 const input = (id: string) => element<HTMLInputElement>(id);
@@ -18,17 +19,16 @@ const status = (message: string, error = false) => {
 const setBusy = (value: boolean) => {
   busy = value;
   document.body.classList.toggle('busy', value);
-  for (const id of ['open', 'empty-open', 'selection', 'mode', 'filename']) (element(id) as HTMLInputElement).disabled = value;
+  for (const id of ['open', 'selection', 'mode', 'filename', 'processing', 'turbo']) (element(id) as HTMLInputElement).disabled = value;
   button('start').disabled = value || !documentInfo;
   button('cancel').disabled = !value;
   element('live').hidden = !value;
 };
 const displaySource = (value: DocumentInfo) => {
+  const changed = documentInfo?.path !== value.path;
   documentInfo = value;
-  const image = element<HTMLImageElement>('preview');
-  image.src = value.image;
-  image.hidden = false;
-  element('source-empty').hidden = true;
+  if (changed) { loadPages(value); displayText(''); }
+  else showPage(value.page);
   input('filename').value = value.path;
   input('filename').title = value.path;
   input('page').value = String(value.page);
@@ -43,8 +43,7 @@ const displaySource = (value: DocumentInfo) => {
 const preview = async (page: number) => {
   if (!documentInfo || !Number.isInteger(page) || page < 1 || page > documentInfo.total) return;
   const request = ++previewRequest;
-  try { const value = await invoke<DocumentInfo>('preview_page', {page}); if (request === previewRequest) displaySource(value); }
-  catch (error) { status(String(error), true); }
+  if(request === previewRequest) displaySource({...documentInfo,page});
 };
 const choose = async () => {
   if (busy) return;
@@ -82,8 +81,21 @@ const update = (value: Snapshot) => {
     button('results').disabled = false;
     element('text-caption').textContent = meta.current_page ? `Page ${meta.current_page} · ${value.active ? 'live recognition' : meta.status}` : 'Waiting for generation';
   }
-  displayText(value.text);
-  if (meta.current_page && autoPage !== meta.current_page) { autoPage = meta.current_page; void preview(autoPage); }
+  const pages = value.document?.pages || [];
+  displayText(pages.length ? pages.map(p => `### Page ${p.page}\n\n${p.blocks?.length ? p.blocks.map(b=>(b.label==='title'?'## ':b.label==='sub_title'?'### ':'')+b.text).join('\n\n') : p.text}`).join('\n\n---\n\n') : value.text);
+  updateBoxes(pages);
+  const metrics = value.document?.metrics;
+  element('tokens').textContent = String(metrics?.tokens || 0);
+  element('rate').textContent = String(metrics?.tokens_per_second || 0);
+  button('pause').disabled = !value.active || meta.status === 'loading';
+  button('pause').textContent = metrics?.paused ? 'Resume' : 'Pause';
+  button('pause').dataset.paused = String(!!metrics?.paused);
+  button('restart').disabled = value.active || !documentInfo;
+  const monitor = metrics?.monitor || {};
+  element('monitor-values').textContent = `CPU ${monitor.cpu ?? '—'}% · RAM ${monitor.ram_used ?? '—'}/${monitor.ram_total ?? '—'} GB · GPU ${monitor.gpu ?? '—'}% · VRAM ${monitor.vram_used ?? '—'}/${monitor.vram_total ?? '—'} MiB · ${monitor.power ?? '—'} W`;
+  element('block-events').textContent = pages.flatMap(p => (p.blocks || []).map(b => `p${p.page}  ${b.label}  ${b.text.slice(0,100)}`)).slice(-60).join('\n');
+  const currentPage = pages.filter(p=>!p.complete).at(-1)?.page || meta.current_page;
+  if (currentPage && autoPage !== currentPage) { autoPage = currentPage; void preview(autoPage); }
 };
 const poll = async () => {
   if (polling) return;
@@ -111,14 +123,20 @@ button('empty-open').onclick = choose;
 button('previous').onclick = () => void preview(Number(input('page').value) - 1);
 button('next').onclick = () => void preview(Number(input('page').value) + 1);
 input('page').onchange = () => void preview(Number(input('page').value));
-button('start').onclick = async () => {
+const start = async (fresh = false) => {
   if (busy || !documentInfo) return;
   setBusy(true); autoPage = 0; displayText('');
   status('Checking document identity and saved progress…');
   try {
-    update(await invoke<Snapshot>('start_run', {selection: input('selection').value, mode: element<HTMLSelectElement>('mode').value}));
+    update(await invoke<Snapshot>('start_run', {selection: input('selection').value, mode: element<HTMLSelectElement>('mode').value, processing:element<HTMLSelectElement>('processing').value, turbo:input('turbo').checked, fresh}));
     void poll();
   } catch (error) { setBusy(false); status(String(error), true); }
+};
+button('start').onclick = () => start();
+button('restart').onclick = () => start(true);
+button('pause').onclick = async () => {
+  try { await invoke('pause_run',{paused:button('pause').dataset.paused !== 'true'}); }
+  catch(error) { status(String(error),true); }
 };
 button('cancel').onclick = async () => {
   try { await invoke('cancel_run'); button('cancel').disabled = true; status('Stopping at the next generation boundary · completed and partial text stay saved.'); }
@@ -126,4 +144,9 @@ button('cancel').onclick = async () => {
 };
 button('results').onclick = async () => { try { await invoke('open_results'); } catch (error) { status(String(error), true); } };
 button('copy').onclick = async () => { try { await navigator.clipboard.writeText(currentText); status('Recognized text copied.'); } catch (error) { status(`Cannot copy: ${error}`, true); } };
-document.addEventListener('keydown', event => { if (event.ctrlKey && event.key.toLowerCase() === 'o') {event.preventDefault(); void choose();} });
+document.addEventListener('keydown', event => {
+  if (event.ctrlKey && event.key.toLowerCase() === 'o') {event.preventDefault(); void choose();}
+  if(['INPUT','SELECT','TEXTAREA'].includes((event.target as HTMLElement).tagName))return;
+  if(event.code==='Space' && busy){event.preventDefault();button('pause').click();}
+  if(event.key==='Enter' && !busy){event.preventDefault();void start();}
+});

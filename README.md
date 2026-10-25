@@ -57,6 +57,30 @@ trusted root merely to suppress warnings.
 [Architecture](docs/architecture.md) · [Persian quality limits](docs/persian-quality.md) ·
 [Third-party notices](THIRD_PARTY_NOTICES.md)
 
+## Reader controls (0.3)
+
+The compact reader keeps a continuous source-page stack and cumulative Markdown output. Actual
+layout boxes are green, with the latest streamed block blue. Preview images load on demand; only
+a small image cache is retained. Page ranges, Base/Gundam and Stop/save remain available.
+
+- **Pause / Resume** holds the current generation in GPU memory; Space toggles it outside inputs.
+  Stop also cancels a paused run. Closing/restarting the app resumes by page checkpoint, not token.
+- **Restart** explicitly starts a fresh output directory; **Start** may resume matching saved work.
+- **Reading** selects page-by-page recovery or Base-only PDF chunks of up to two pages. Multi-page
+  output must contain each selected page and end normally; malformed/truncated output fails safely.
+  Previously committed pages survive cancellation/OOM. Chunk mode is not unlimited one-shot context.
+- **Turbo** batches selected MoE expert operations on CUDA at runtime. Original BF16 weights and
+  downloaded model source remain unchanged; this is not quantization or a different checkpoint.
+- The collapsible monitor shows actual CPU/RAM/NVIDIA usage and recent detected blocks. Missing
+  readings display a dash. Token throughput measures active decode, not model loading or paused time.
+
+The reference recording uses a warmed Apple MLX/Core ML implementation, not this Windows BF16
+runtime. A short warmed32token comparison measured4.91s baseline versus3.85s Turbo with identical
+text; it is not a full-document speed guarantee. A real2page Turbo chunk completed at11.1tokens/s
+with6938.7MiB peak allocation. The full public page retained the baseline recognized text;
+a few layout coordinates differed by1–2/1000 under BF16 batching. Model load is reported
+separately; no263tokens/s claim is made.
+
 ## Run
 
 **Open `run.ps1` directly** to launch the native graphical workspace. The extra shortcut is
@@ -251,8 +275,8 @@ Rust-workspace validation: `scripts/test_desktop.py --gpu` tests actual hidden W
 preview navigation, range errors, mode selection and original CUDA worker cancellation. CDP is enabled
 only in the test-owned process environment. `--render` omits GPU inference.
 Markdown DOM/sanitizer and actual CUDA cancel/reopen/resume were verified locally; the completed
-page hash remained unchanged. Native file-drop is implemented, but the automated Windows OLE
-probe timed out in the test environment: actual Explorer drag/drop remains unverified. Legacy Qt rollback
+page hash remained unchanged. Actual Explorer drops were verified for PDF and Persian filenames;
+multiple files and directories reject without replacing the selected source. Legacy Qt rollback
 validation: `scripts/test_visual.py --gui-worker` tests real QProcess CUDA OCR,
 then cancellation after page1, saved result and50% progress. `scripts/test_workflow.py` checks
 ranges/Persian digits/atomic checkpoints; `scripts/test_launcher.py --full` checks console Enter1,

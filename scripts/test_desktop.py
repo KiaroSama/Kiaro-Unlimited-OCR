@@ -89,15 +89,28 @@ def render(gpu=False):
             if gpu:
                 page.fill('#selection', '1-2')
                 page.select_option('#mode', 'base')
+                page.check('#turbo')
                 page.evaluate("async () => await document.querySelector('#start').onclick(new Event('click'))")
                 deadline = time.monotonic() + 480
                 cancelled = False
                 streamed = False
+                pause_checked = False
                 heartbeat = time.monotonic()
                 while True:
                     snapshot = page.evaluate(invoke, ['poll_run', {}])
                     meta = snapshot['metadata']
                     streamed = streamed or bool(snapshot['text'])
+                    if streamed and not pause_checked:
+                        page.evaluate(invoke, ['pause_run', {'paused':True}])
+                        page.wait_for_function("async () => (await window.__TAURI__.core.invoke('poll_run')).document.metrics.paused", timeout=15000)
+                        page.wait_for_function("() => document.querySelector('#pause').textContent==='Resume'")
+                        paused = page.evaluate(invoke, ['poll_run', {}])['document']['metrics']
+                        assert paused['paused'], paused
+                        frozen = paused['tokens']
+                        stable = page.evaluate(invoke, ['poll_run', {}])['document']['metrics']
+                        assert stable['paused'] and stable['tokens'] == frozen, (paused, stable)
+                        page.evaluate(invoke, ['pause_run', {'paused':False}])
+                        pause_checked = True
                     if len(meta['completed_pages']) >= 1 and not cancelled:
                         page.screenshot(path=str(ROOT / 'outputs/desktop-live.png'))
                         page.dispatch_event('#cancel', 'click')
@@ -145,6 +158,13 @@ def render(gpu=False):
             assert page.locator('#recognized strong').inner_text() == 'پررنگ'
             assert page.locator('#recognized table tbody tr').count() == 1
             assert page.locator('#recognized li').count() == 2
+            assert page.locator('.source-page').count() == 14
+            assert page.locator('#turbo').count() == 1
+            assert page.locator('.topbar').evaluate('(e)=>getComputedStyle(e).backgroundColor') == 'rgb(44, 42, 41)'
+            page.mouse.move(0,0)
+            assert page.locator('#start').evaluate('(e)=>getComputedStyle(e).backgroundColor') == 'rgb(8, 123, 255)'
+            page.locator('#monitor summary').dispatch_event('click')
+            assert page.locator('#monitor').evaluate('(e)=>e.open')
             assert page.locator('#recognized pre code').inner_text().strip() == 'print(1)'
             assert page.locator('#recognized img,#recognized script,#recognized a,#recognized [onerror]').count() == 0
             assert not page.evaluate('window.pwned || false')

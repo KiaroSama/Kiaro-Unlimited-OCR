@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod dashboard;
 mod document;
 mod file_drop;
 #[cfg(test)]
@@ -48,12 +49,18 @@ fn preview_page(page: u32, state: tauri::State<'_, State>) -> Result<Value, Stri
 fn start_run(
     selection: String,
     mode: String,
+    processing: Option<String>,
+    turbo: Option<bool>,
+    fresh: Option<bool>,
     state: tauri::State<'_, State>,
 ) -> Result<Value, String> {
-    state
-        .lock()
-        .map_err(|e| e.to_string())?
-        .start(selection, mode)
+    state.lock().map_err(|e| e.to_string())?.start(
+        selection,
+        mode,
+        processing.unwrap_or_else(|| "pagewise".into()),
+        turbo.unwrap_or(false),
+        fresh.unwrap_or(false),
+    )
 }
 #[tauri::command]
 fn poll_run(state: tauri::State<'_, State>) -> Result<Value, String> {
@@ -62,6 +69,10 @@ fn poll_run(state: tauri::State<'_, State>) -> Result<Value, String> {
 #[tauri::command]
 fn cancel_run(state: tauri::State<'_, State>) -> Result<(), String> {
     state.lock().map_err(|e| e.to_string())?.cancel()
+}
+#[tauri::command]
+fn pause_run(paused: bool, state: tauri::State<'_, State>) -> Result<(), String> {
+    state.lock().map_err(|e| e.to_string())?.pause(paused)
 }
 #[tauri::command]
 fn open_results(state: tauri::State<'_, State>) -> Result<(), String> {
@@ -91,7 +102,7 @@ fn main() {
     }
     let app = tauri::Builder::default()
         .manage(Mutex::new(Workspace::new(root)))
-        .on_webview_event(file_drop::handle)
+        .on_window_event(file_drop::handle)
         .invoke_handler(tauri::generate_handler![
             choose_document,
             open_document,
@@ -99,6 +110,7 @@ fn main() {
             start_run,
             poll_run,
             cancel_run,
+            pause_run,
             open_results
         ])
         .setup(move |app| {

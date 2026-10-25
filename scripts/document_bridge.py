@@ -46,6 +46,8 @@ def main() -> int:
     parser.add_argument('--job', action='store_true')
     parser.add_argument('--selection', default='')
     parser.add_argument('--mode', choices=('base', 'gundam'), default='base')
+    parser.add_argument('--processing', choices=('pagewise', 'multi'), default='pagewise')
+    parser.add_argument('--turbo', action='store_true')
     args = parser.parse_args()
     try:
         if args.job:
@@ -55,6 +57,8 @@ def main() -> int:
             from page_selection import parse_pages
             info = inspect_document(args.source)
             job = identity(Path(info['path']), parse_pages(args.selection, info['total']), args.mode, 8192)
+            if args.processing != 'pagewise' or args.turbo:
+                job.update(processing=args.processing, chunk_size=2, turbo=args.turbo)
             found = find_run(Path(__file__).resolve().parents[1], job)
             result = {'resume': str(found) if found else None}
         else:

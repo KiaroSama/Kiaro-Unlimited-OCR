@@ -20,6 +20,18 @@ source previews and the current run only. Arguments are passed directly, never i
 shell. The CSP blocks remote scripts, frames and object content. Model Markdown is parsed with Marked then sanitized with a strict DOMPurify tag allowlist.
 Scripts, attributes, remote media and navigable links are removed; no model HTML executes. Runtime files, diagnostics and WebView state remain inside the installation.
 
+## Reader streaming and acceleration
+
+`generation_control.py` owns token-boundary pause/cancel and phase-specific counters. `layout_blocks.py`
+parses generated coordinates as data, never eval. `document_processing.py` calls the original
+multi-page API in bounded Base-only chunks and commits verified page boundaries. `cuda_fastpath.py`
+replaces only runtime single-token MoE dispatch with selected-expert batching; weights stay BF16.
+
+The Rust dashboard joins completed checkpoint text/layout with the active stream. The frontend
+lazily loads source previews, draws normalized boxes and renders cumulative sanitized Markdown.
+Hardware readings come from bounded local psutil/NVIDIA calls; no document text enters operational
+logs. Native main-window drops route through `WindowEvent::DragDrop`.
+
 ## Lifecycle
 
 Open document -> validate preview -> choose pages/mode -> create unique run -> start one Python

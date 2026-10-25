@@ -44,6 +44,8 @@ class RunStore:
             self.prior_seconds = self.meta.get('seconds', 0)
             self.meta.update(status='loading', current_page=None, resumed=True)
             (directory / 'cancel.request').unlink(missing_ok=True)
+            (directory / 'pause.request').unlink(missing_ok=True)
+            (directory / 'stream.json').unlink(missing_ok=True)
             self.rebuild_result()
         else:
             self.meta = {"status": "loading", "selected_pages": pages, "completed_pages": [],
@@ -82,7 +84,9 @@ class RunStore:
         atomic_text(self.directory / f"page-{page:04d}.md", clean)
         self.meta["completed_pages"].append(page)
         from recovery import file_hash
+        from layout_blocks import parse_blocks
         self.meta["pages"].append({"page": page, "characters": len(clean), "seconds": round(seconds, 2),
+                                   "blocks": parse_blocks(raw),
                                    "sha256": file_hash(self.directory / f'page-{page:04d}.md')})
         self.rebuild_result()
         done = len(self.meta["completed_pages"])

@@ -43,18 +43,27 @@ pub fn preview(root: &Path, source: &Path, page: u32) -> Result<Value, String> {
     adapter(root, source, &["--page".into(), page.to_string()])
 }
 
-pub fn recovery(root: &Path, source: &Path, selection: &str, mode: &str) -> Result<Value, String> {
-    adapter(
-        root,
-        source,
-        &[
-            "--job".into(),
-            "--selection".into(),
-            selection.into(),
-            "--mode".into(),
-            mode.into(),
-        ],
-    )
+pub fn recovery(
+    root: &Path,
+    source: &Path,
+    selection: &str,
+    mode: &str,
+    processing: &str,
+    turbo: bool,
+) -> Result<Value, String> {
+    let mut args = vec![
+        "--job".into(),
+        "--selection".into(),
+        selection.into(),
+        "--mode".into(),
+        mode.into(),
+        "--processing".into(),
+        processing.into(),
+    ];
+    if turbo {
+        args.push("--turbo".into());
+    }
+    adapter(root, source, &args)
 }
 
 fn adapter(root: &Path, source: &Path, arguments: &[String]) -> Result<Value, String> {

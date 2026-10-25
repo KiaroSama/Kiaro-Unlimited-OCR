@@ -12,19 +12,19 @@ pub fn open_dropped(
     workspace.open(paths[0].clone())
 }
 
-pub fn handle(webview: &tauri::Webview, event: &tauri::WebviewEvent) {
-    let tauri::WebviewEvent::DragDrop(event) = event else {
+pub fn handle(window: &tauri::Window, event: &tauri::WindowEvent) {
+    let tauri::WindowEvent::DragDrop(event) = event else {
         return;
     };
     match event {
         tauri::DragDropEvent::Enter { .. } => {
-            let _ = webview.emit("file-hover", true);
+            let _ = window.emit("file-hover", true);
         }
         tauri::DragDropEvent::Leave => {
-            let _ = webview.emit("file-hover", false);
+            let _ = window.emit("file-hover", false);
         }
         tauri::DragDropEvent::Drop { paths, .. } => {
-            let handle = webview.app_handle().clone();
+            let handle = window.app_handle().clone();
             let paths = paths.clone();
             let _ = handle.emit("file-hover", false);
             std::thread::spawn(move || {

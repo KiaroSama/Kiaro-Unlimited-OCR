@@ -67,7 +67,14 @@ impl Workspace {
         self.log.info("Document opened");
         Ok(result)
     }
-    pub fn start(&mut self, selection: String, mode: String) -> Result<Value, String> {
+    pub fn start(
+        &mut self,
+        selection: String,
+        mode: String,
+        processing: String,
+        turbo: bool,
+        fresh: bool,
+    ) -> Result<Value, String> {
         if self.active()? {
             return Err("An OCR worker is already running.".into());
         }
@@ -77,7 +84,20 @@ impl Workspace {
         let source = self.source.as_ref().ok_or("Open a document first.")?;
         let pages = parse_pages(&selection, self.total)?;
         fs::create_dir_all(self.root.join("outputs")).map_err(|e| e.to_string())?;
-        let recovered = document::recovery(&self.root, source, &selection, &mode)?;
+        if !["pagewise", "multi"].contains(&processing.as_str())
+            || (processing == "multi"
+                && (mode != "base"
+                    || source
+                        .extension()
+                        .is_none_or(|e| !e.eq_ignore_ascii_case("pdf"))))
+        {
+            return Err("Multi-page processing requires a PDF in Base mode.".into());
+        }
+        let recovered = if fresh {
+            json!({})
+        } else {
+            document::recovery(&self.root, source, &selection, &mode, &processing, turbo)?
+        };
         let resume = recovered["resume"].as_str().map(PathBuf::from);
         let directory = resume.clone().unwrap_or_else(|| {
             self.root.join("outputs").join(format!(
@@ -95,7 +115,15 @@ impl Workspace {
             .write(true)
             .open(diagnostics)
             .map_err(|e| e.to_string())?;
-        let child = document::command(&self.root, "ocr.py")
+        let mut command = document::command(&self.root, "ocr.py");
+        command.args(["--processing", &processing]);
+        if turbo {
+            command.arg("--turbo");
+        }
+        if fresh {
+            command.arg("--fresh");
+        }
+        let child = command
             .arg(source)
             .args([
                 "--mode",
@@ -142,6 +170,22 @@ impl Workspace {
         }
         Ok(())
     }
+    pub fn pause(&mut self, paused: bool) -> Result<(), String> {
+        if !self.active()? {
+            return Err("No active OCR worker.".into());
+        }
+        let directory = self.run.as_ref().ok_or("Run is not ready.")?;
+        if !directory.is_dir() {
+            return Err("Wait for model initialization.".into());
+        }
+        let request = directory.join("pause.request");
+        if paused {
+            File::create(request).map_err(|e| e.to_string())?;
+        } else if request.exists() {
+            fs::remove_file(request).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
     pub fn poll(&mut self) -> Result<Value, String> {
         let active = self.active()?;
         let mut meta = json!({"status": if active { "loading" } else { "ready" }, "completed_pages": [], "selected_pages": [], "percent": 0});
@@ -170,9 +214,14 @@ impl Workspace {
                 meta["status"] = json!("failed");
             }
         }
+        let document = if let Some(path) = &self.run {
+            crate::dashboard::read(path, &meta)?
+        } else {
+            json!({"pages":[],"metrics":{}})
+        };
         Ok(
             json!({"active":active,"metadata":meta,"text":text,"seconds":self.started.elapsed().as_secs(),
-            "output": self.run.as_ref().map(|p| p.to_string_lossy()), "closing":self.closing}),
+            "document":document,"output": self.run.as_ref().map(|p| p.to_string_lossy()), "closing":self.closing}),
         )
     }
 }

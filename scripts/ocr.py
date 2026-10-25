@@ -76,9 +76,8 @@ def start_log() -> tuple[logging.Logger, Path | None]:
 
 def clean_text(raw: str) -> str:
     """Remove detection markers as text, never evaluate generated expressions."""
-    text = re.sub(r"<\|det\|>.*?<\|/det\|>", "", raw, flags=re.DOTALL)
-    text = re.sub(r"<\|/?ref\|>", "", text)
-    return text.strip() + "\n"
+    from layout_blocks import display_text
+    return display_text(raw) + '\n'
 
 
 def validate_input(path: Path) -> Path:
@@ -191,7 +190,11 @@ def process_file(source: Path, tokenizer: Any, model: Any, mode: str,
 
     try:
         with control:
-            if source.suffix.lower() == ".pdf":
+            if store.meta.get('processing') == 'multi':
+                from document_processing import process_chunks
+                process_chunks(source, tokenizer, model, store, control, max_length, ROOT,
+                               store.meta.get('chunk_size', 2))
+            elif source.suffix.lower() == ".pdf":
                 import pymupdf
                 with pymupdf.open(str(source)) as document:
                     store.meta["source_pages"] = document.page_count
@@ -237,6 +240,10 @@ def main() -> int:
     parser.add_argument("--page-selection", default="", help="PDF pages, e.g. 1,3,10-20; empty means all")
     parser.add_argument("--run-dir", type=Path, help="New project-local output directory for UI worker")
     parser.add_argument('--resume-dir', type=Path, help='Existing matching job inside project outputs')
+    parser.add_argument('--processing', choices=('pagewise', 'multi'), default='pagewise')
+    parser.add_argument('--chunk-size', type=int, default=2, choices=(1, 2))
+    parser.add_argument('--turbo', action='store_true', help='Runtime CUDA batching without changing model weights')
+    parser.add_argument('--fresh', action='store_true', help='Start a new run without replacing saved output')
     args = parser.parse_args()
     if args.pages < 0 or not 1024 <= args.max_length <= 32768:
         parser.error("--pages must be >= 0; --max-length must be 1024..32768")
@@ -263,10 +270,14 @@ def main() -> int:
         selected = parse_pages(args.page_selection, total)
         if args.pages:
             selected = selected[:args.pages]
+        if args.processing == 'multi' and (args.mode != 'base' or source.suffix.lower() != '.pdf'):
+            raise ValueError('Multi-page processing requires a PDF in Base mode.')
         job = identity(source, selected, args.mode, args.max_length)
+        if args.processing != 'pagewise' or args.turbo:
+            job.update(processing=args.processing, chunk_size=args.chunk_size, turbo=args.turbo)
         ownership = JobLock(ROOT, job)
         ownership.__enter__()
-        resume = args.resume_dir.resolve() if args.resume_dir else (None if args.run_dir else find_run(ROOT, job))
+        resume = args.resume_dir.resolve() if args.resume_dir and not args.fresh else (None if args.run_dir or args.fresh else find_run(ROOT, job))
         if resume:
             if not resume.is_relative_to((ROOT / 'outputs').resolve()) or not resume.is_dir():
                 raise ValueError('Resume directory must be an existing job inside project outputs.')
@@ -283,7 +294,14 @@ def main() -> int:
         print(f"Output: {output}", flush=True)
         info = check_runtime()
         log.info("Device=%s gpu=%s CUDA=%s", info['device'], info['gpu'], info['cuda_runtime'])
+        load_started = time.monotonic()
         tokenizer, model = load_model(log)
+        store.meta['load_seconds'] = round(time.monotonic() - load_started, 3)
+        if args.turbo:
+            from cuda_fastpath import enable_turbo
+            log.info('Turbo CUDA batching enabled layers=%d', enable_turbo(model))
+        store.meta.update(processing=args.processing, chunk_size=args.chunk_size, turbo=args.turbo)
+        store.save()
         if (output / "cancel.request").exists():
             raise InterruptedError("Cancelled during model loading.")
         output = process_file(source, tokenizer, model, args.mode, args.pages, args.max_length, log, store)
