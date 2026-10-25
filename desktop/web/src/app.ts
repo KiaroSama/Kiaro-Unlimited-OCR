@@ -1,4 +1,5 @@
 import { invoke, type DocumentInfo, type Snapshot } from './bridge.js';
+import { renderMarkdown } from './markdown.js';
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const button = (id: string) => element<HTMLButtonElement>(id);
 const input = (id: string) => element<HTMLInputElement>(id);
@@ -57,7 +58,7 @@ const displayText = (text: string) => {
   currentText = text;
   const target = element('recognized');
   const follow = target.scrollHeight - target.scrollTop - target.clientHeight < 65;
-  target.textContent = text;
+  renderMarkdown(target, text);
   target.hidden = !text;
   element('text-empty').hidden = !!text;
   element('characters').textContent = `${text.length.toLocaleString()} characters`;
@@ -77,7 +78,7 @@ const update = (value: Snapshot) => {
   else progress.value = meta.percent;
   element('state-pill').textContent = meta.status.charAt(0).toUpperCase() + meta.status.slice(1);
   if (value.output) {
-    status(meta.status === 'loading' ? 'Loading original CUDA model · saved progress is preserved.' : `${count}/${total} pages saved${meta.current_page ? ` · source page ${meta.current_page}` : ''} · ${meta.status}`, meta.status === 'failed');
+    status(meta.status === 'loading' ? `${meta.resumed ? 'Resuming saved pages' : 'Loading original CUDA model'} · ${count} pages preserved.` : `${count}/${total} pages saved${meta.current_page ? ` · source page ${meta.current_page}` : ''} · ${meta.status}`, meta.status === 'failed');
     button('results').disabled = false;
     element('text-caption').textContent = meta.current_page ? `Page ${meta.current_page} · ${value.active ? 'live recognition' : meta.status}` : 'Waiting for generation';
   }
@@ -96,6 +97,15 @@ input('filename').onkeydown = async event => {
   try { displaySource(await invoke<DocumentInfo>('open_document', {path: input('filename').value.trim().replace(/^\"|\"$/g, '')})); status('Document loaded. Choose pages and start OCR.'); }
   catch (error) { status(String(error), true); }
 };
+if (window.__TAURI__) {
+  void window.__TAURI__.event.listen<boolean>('file-hover', event => document.body.classList.toggle('file-hover', event.payload && !busy));
+  void window.__TAURI__.event.listen<DocumentInfo>('source-opened', event => {
+    if (busy) return;
+    displaySource(event.payload); displayText('');
+    status(`${event.payload.total} source pages loaded. Matching unfinished work resumes when you start.`);
+  });
+  void window.__TAURI__.event.listen<string>('source-error', event => status(event.payload, true));
+}
 button('open').onclick = choose;
 button('empty-open').onclick = choose;
 button('previous').onclick = () => void preview(Number(input('page').value) - 1);
@@ -104,6 +114,7 @@ input('page').onchange = () => void preview(Number(input('page').value));
 button('start').onclick = async () => {
   if (busy || !documentInfo) return;
   setBusy(true); autoPage = 0; displayText('');
+  status('Checking document identity and saved progress…');
   try {
     update(await invoke<Snapshot>('start_run', {selection: input('selection').value, mode: element<HTMLSelectElement>('mode').value}));
     void poll();

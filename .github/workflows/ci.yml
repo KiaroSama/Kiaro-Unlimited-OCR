@@ -30,6 +30,8 @@ jobs:
         run: |
           python -I -X utf8 scripts/test_workflow.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -I -X utf8 scripts/test_recovery.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -I -X utf8 scripts/test_desktop.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -I -X utf8 scripts/check_source.py
@@ -38,6 +40,8 @@ jobs:
         run: |
           rustup update stable --no-self-update
           cargo fmt --manifest-path desktop/Cargo.toml --check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo clippy --locked --manifest-path desktop/Cargo.toml --all-targets -j 2 -- -D warnings
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           cargo test --locked --manifest-path desktop/Cargo.toml -j 2
           exit $LASTEXITCODE

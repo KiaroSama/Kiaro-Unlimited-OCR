@@ -1,6 +1,7 @@
 """Bounded native desktop verification; one owner, one CUDA worker, hidden WebView."""
 import argparse
 import json
+import hashlib
 import os
 from pathlib import Path
 import sys
@@ -82,10 +83,13 @@ def render(gpu=False):
             page.dispatch_event("#next", "click")
             page.wait_for_function("() => document.querySelector('#page').value==='2'")
             page.screenshot(path=str(ROOT / "outputs/desktop-source.png"))
+            page.fill('#page', '1')
+            page.dispatch_event('#page', 'change')
+            page.wait_for_function("() => document.querySelector('#source-caption').textContent.includes('page 1 of')")
             if gpu:
                 page.fill('#selection', '1-2')
                 page.select_option('#mode', 'base')
-                page.dispatch_event('#start', 'click')
+                page.evaluate("async () => await document.querySelector('#start').onclick(new Event('click'))")
                 deadline = time.monotonic() + 480
                 cancelled = False
                 streamed = False
@@ -111,13 +115,46 @@ def render(gpu=False):
                         heartbeat = time.monotonic()
                     page.wait_for_timeout(200)
                 page.wait_for_function("() => !document.body.classList.contains('busy')")
+                directory = Path(snapshot['output'])
+                saved = directory / 'page-0001.md'
+                saved_hash = hashlib.sha256(saved.read_bytes()).hexdigest()
+                page.fill('#filename', str(source))
+                page.press('#filename', 'Enter')
+                page.wait_for_function("() => document.querySelector('#status').textContent.includes('Document loaded')")
+                page.evaluate("async () => await document.querySelector('#start').onclick(new Event('click'))")
+                deadline = time.monotonic() + 480
+                while True:
+                    snapshot = page.evaluate(invoke, ['poll_run', {}])
+                    if not snapshot['active']:
+                        assert snapshot['metadata']['status'] == 'completed', snapshot['metadata']
+                        assert snapshot['output'] == str(directory)
+                        assert snapshot['metadata']['completed_pages'] == [1, 2]
+                        assert hashlib.sha256(saved.read_bytes()).hexdigest() == saved_hash
+                        assert len((directory / 'page-0002.md').read_text(encoding='utf-8')) > 100
+                        break
+                    assert time.monotonic() < deadline, 'Resume exceeded 480s'
+                    if time.monotonic() - heartbeat > 15:
+                        print('Resume GPU heartbeat', snapshot['metadata']['status'], flush=True)
+                        heartbeat = time.monotonic()
+                    page.wait_for_timeout(200)
+                page.wait_for_function("() => !document.body.classList.contains('busy')")
+                print('PASS real cancel/reopen/resume, completed page hash unchanged', flush=True)
+            fixture = '# عنوان فارسی\n\n**پررنگ** و متن خوانا\n\n| Name | Value |\n|---|---|\n| نمونه | 100 |\n\n- First\n- Second\n\n```python\nprint(1)\n```\n\n<img src="https://invalid.example/image" onerror="window.pwned=1"><script>window.pwned=1</script>[bad](javascript:alert(1))'
+            page.evaluate("async text => {const {renderMarkdown}=await import('./markdown.js');const target=document.querySelector('#recognized');renderMarkdown(target,text);target.hidden=false;document.querySelector('#text-empty').hidden=true;}", fixture)
+            assert page.locator('#recognized h1').inner_text() == 'عنوان فارسی'
+            assert page.locator('#recognized strong').inner_text() == 'پررنگ'
+            assert page.locator('#recognized table tbody tr').count() == 1
+            assert page.locator('#recognized li').count() == 2
+            assert page.locator('#recognized pre code').inner_text().strip() == 'print(1)'
+            assert page.locator('#recognized img,#recognized script,#recognized a,#recognized [onerror]').count() == 0
+            assert not page.evaluate('window.pwned || false')
             page.screenshot(path=str(ROOT / "outputs/desktop-workspace.png"))
             page.set_viewport_size({"width": 900, "height": 700})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=str(ROOT / "outputs/desktop-compact.png"))
             assert not errors, errors
             page.keyboard.press("Tab")
-            assert page.evaluate("document.activeElement.tagName") in ("BUTTON", "INPUT", "SELECT", "PRE")
+            assert page.evaluate("document.activeElement.tagName") in ("BUTTON", "INPUT", "SELECT", "ARTICLE")
             browser.close()
         print("PASS actual hidden Rust WebView IPC, preview, validation, resize and render", flush=True)
     finally:

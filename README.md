@@ -63,7 +63,10 @@ trusted root merely to suppress warnings.
 not required. No Windows file association or execution policy is changed.
 
 The visual workspace has source preview/page navigation, local file picker, page selection,
-Base/Gundam mode, live Unicode/RTL text, completed-page progress and Cancel/keep results.
+Base/Gundam mode, rendered Markdown/RTL, completed-page progress and Cancel/keep results.
+Drop one local PDF/image into the window to load it; multiple files and directories are rejected.
+Headings, emphasis, lists, tables and code render in the right pane. Scripts, remote images and
+navigable links are removed; Copy retains the original Markdown.
 Model loading is shown as busy rather than a fabricated percentage. The percentage is completed
 selected pages / total selected pages, not an estimate of remaining tokens in the current page.
 
@@ -121,8 +124,14 @@ Each run creates a unique directory in `outputs/`:
 - `page-0001.md`: cleaned page text; corresponding `.raw.md` preserves original model output.
 - `metadata.json`: actual device, versions, timing, peak allocated VRAM, pages and status.
 
-Inputs and previous run directories are never overwritten. Every completed page, combined result
-and metadata checkpoint is atomically replaced only inside its own new run directory. Streaming
+Inputs are never modified. Reopening the same content with the same ordered page selection, mode,
+context length and model revision automatically resumes a matching unfinished run when Start is
+pressed. Completed page hashes are verified and those pages are not regenerated. The unfinished
+page starts again from its beginning, not its last token. Changed content/settings create a separate
+run; corrupt checkpoints fail explicitly without overwriting them. Old jobs without a stored source
+identity cannot be automatically matched. Concurrent writers to the same job are rejected by an
+OS-backed lock that releases on crash. Each completed page, combined result and metadata checkpoint
+is atomically replaced inside the current run; verified completed pages are preserved on resume. Streaming
 current text is saved as `page-NNNN.partial.md` and is never counted as completed.
 Cancel in the GUI or Ctrl+C in the console requests a stop at the next token boundary; model
 loading/prefill can take longer to respond. Completed pages and current partial text remain saved,
@@ -240,7 +249,10 @@ No training, checkpoint modification or blanket warning suppression was performe
 
 Rust-workspace validation: `scripts/test_desktop.py --gpu` tests actual hidden WebView IPC,
 preview navigation, range errors, mode selection and original CUDA worker cancellation. CDP is enabled
-only in the test-owned process environment. `--render` omits GPU inference. Legacy Qt rollback
+only in the test-owned process environment. `--render` omits GPU inference.
+Markdown DOM/sanitizer and actual CUDA cancel/reopen/resume were verified locally; the completed
+page hash remained unchanged. Native file-drop is implemented, but the automated Windows OLE
+probe timed out in the test environment: actual Explorer drag/drop remains unverified. Legacy Qt rollback
 validation: `scripts/test_visual.py --gui-worker` tests real QProcess CUDA OCR,
 then cancellation after page1, saved result and50% progress. `scripts/test_workflow.py` checks
 ranges/Persian digits/atomic checkpoints; `scripts/test_launcher.py --full` checks console Enter1,

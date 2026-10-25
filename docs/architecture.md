@@ -10,15 +10,15 @@ not a hosted website or remote inference service.
 - `desktop/src/workspace.rs`: selected source, one owned worker, validated ranges/modes,
   checkpoint polling, cooperative cancellation and shutdown cleanup.
 - `desktop/src/document.rs`: bounded local preview adapter and installation-relative paths.
-- `desktop/web/`: presentation, keyboard navigation, plain-text RTL rendering and honest progress.
+- `desktop/web/`: presentation, keyboard navigation, sanitized Markdown/RTL rendering and honest progress.
 - `scripts/document_bridge.py`: PDF/image metadata and preview, without loading model dependencies.
 - `scripts/ocr.py`, `generation_control.py`, `run_storage.py`: original CUDA model
   adapter, streaming checkpoints, atomic saved pages and cancellation.
 
 The renderer cannot choose arbitrary executables or read arbitrary files: commands expose selected
 source previews and the current run only. Arguments are passed directly, never interpolated into a
-shell. The CSP blocks remote scripts, frames and object content. Model text is assigned as plaintext,
-not HTML. Runtime files, diagnostics and WebView state remain inside the installation.
+shell. The CSP blocks remote scripts, frames and object content. Model Markdown is parsed with Marked then sanitized with a strict DOMPurify tag allowlist.
+Scripts, attributes, remote media and navigable links are removed; no model HTML executes. Runtime files, diagnostics and WebView state remain inside the installation.
 
 ## Lifecycle
 
@@ -45,4 +45,7 @@ local CDP, runs the original model, stops after one saved page and checks retain
 Test-only CDP is enabled by the owner process environment, not in normal application startup.
 
 The legacy Qt workspace remains as a source-level rollback during migration; the default launcher
-and console workspace action use the Rust executable. No automatic resume-existing-job UI exists.
+and console workspace action use the Rust executable. Matching unfinished jobs now resume automatically when Start is pressed. Recovery uses content
+SHA256, ordered pages, mode, context length and model revision; complete-page hashes are checked.
+A job-level OS lock rejects concurrent writers and releases after a crash. Incomplete pages restart,
+not token-level KV state. Native Rust file-drop uses the same validation as the Open action.

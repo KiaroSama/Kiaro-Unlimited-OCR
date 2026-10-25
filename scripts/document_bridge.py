@@ -43,9 +43,23 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
     parser.add_argument("--page", type=int, default=1)
+    parser.add_argument('--job', action='store_true')
+    parser.add_argument('--selection', default='')
+    parser.add_argument('--mode', choices=('base', 'gundam'), default='base')
     args = parser.parse_args()
     try:
-        print(json.dumps(inspect_document(args.source, args.page), ensure_ascii=False))
+        if args.job:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from recovery import identity, find_run
+            from page_selection import parse_pages
+            info = inspect_document(args.source)
+            job = identity(Path(info['path']), parse_pages(args.selection, info['total']), args.mode, 8192)
+            found = find_run(Path(__file__).resolve().parents[1], job)
+            result = {'resume': str(found) if found else None}
+        else:
+            result = inspect_document(args.source, args.page)
+        print(json.dumps(result, ensure_ascii=False))
         return 0
     except Exception as error:
         print(json.dumps({"error": str(error)}, ensure_ascii=False))

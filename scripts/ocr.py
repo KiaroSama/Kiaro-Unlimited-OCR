@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from page_selection import parse_pages
 from run_storage import RunStore, new_run
 from generation_control import GenerationControl
+from recovery import identity, find_run, JobLock
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT / "models" / "Unlimited-OCR"
@@ -196,6 +197,8 @@ def process_file(source: Path, tokenizer: Any, model: Any, mode: str,
                     store.meta["source_pages"] = document.page_count
                     with tempfile.TemporaryDirectory(prefix="pdf_", dir=ROOT / ".tmp") as tmp:
                         for number in store.meta["selected_pages"]:
+                            if number in store.meta['completed_pages']:
+                                continue
                             if control.stop_requested():
                                 raise InterruptedError("Cancelled between pages.")
                             page = document[number - 1]
@@ -206,7 +209,7 @@ def process_file(source: Path, tokenizer: Any, model: Any, mode: str,
                             pixmap.save(str(image))
                             del pixmap
                             run_page(image, number, mode)
-            else:
+            elif 1 not in store.meta['completed_pages']:
                 run_page(source, 1, mode)
         store.finish("completed")
         return output
@@ -233,6 +236,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Check local model and CUDA without loading weights")
     parser.add_argument("--page-selection", default="", help="PDF pages, e.g. 1,3,10-20; empty means all")
     parser.add_argument("--run-dir", type=Path, help="New project-local output directory for UI worker")
+    parser.add_argument('--resume-dir', type=Path, help='Existing matching job inside project outputs')
     args = parser.parse_args()
     if args.pages < 0 or not 1024 <= args.max_length <= 32768:
         parser.error("--pages must be >= 0; --max-length must be 1024..32768")
@@ -243,12 +247,11 @@ def main() -> int:
     log, log_path = start_log()
     log.info("Startup python=%s log=%s", sys.version.split()[0], log_path)
     store = None
+    ownership = None
     try:
         source = validate_input(args.input) if args.input else None
-        info = check_runtime()
-        log.info("Device=%s gpu=%s CUDA=%s free_vram_mib=%d", info["device"], info["gpu"],
-                 info["cuda_runtime"], info["free_vram_mib"])
         if args.check:
+            info = check_runtime()
             print(json.dumps(info, ensure_ascii=False, indent=2))
             return 0
         assert source is not None
@@ -260,15 +263,26 @@ def main() -> int:
         selected = parse_pages(args.page_selection, total)
         if args.pages:
             selected = selected[:args.pages]
-        if args.run_dir:
+        job = identity(source, selected, args.mode, args.max_length)
+        ownership = JobLock(ROOT, job)
+        ownership.__enter__()
+        resume = args.resume_dir.resolve() if args.resume_dir else (None if args.run_dir else find_run(ROOT, job))
+        if resume:
+            if not resume.is_relative_to((ROOT / 'outputs').resolve()) or not resume.is_dir():
+                raise ValueError('Resume directory must be an existing job inside project outputs.')
+            output = resume
+        elif args.run_dir:
             output = args.run_dir.resolve()
             if not output.is_relative_to(ROOT / "outputs") or output.exists():
                 raise ValueError("--run-dir must be a new directory inside project outputs.")
             output.mkdir(parents=True)
         else:
             output = new_run(ROOT)
-        store = RunStore(output, selected, args.mode)
+        store = RunStore(output, selected, args.mode, job=job, resume=bool(resume))
+        log.info('Recovery resumed=%s completed=%d', bool(resume), len(store.meta['completed_pages']))
         print(f"Output: {output}", flush=True)
+        info = check_runtime()
+        log.info("Device=%s gpu=%s CUDA=%s", info['device'], info['gpu'], info['cuda_runtime'])
         tokenizer, model = load_model(log)
         if (output / "cancel.request").exists():
             raise InterruptedError("Cancelled during model loading.")
@@ -286,6 +300,8 @@ def main() -> int:
         log.exception("OCR failed (%s). Existing outputs are preserved.", type(error).__name__)
         return 1
     finally:
+        if ownership:
+            ownership.__exit__(None, None, None)
         log.info("Shutdown")
         for handler in list(log.handlers):
             handler.close()

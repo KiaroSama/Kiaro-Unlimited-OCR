@@ -32,6 +32,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Markdown renderer
+
+The desktop bundles [Marked 18.1.1](https://github.com/markedjs/marked) (MIT, including its
+Markdown/BSD attribution) and [DOMPurify 3.4.17](https://github.com/cure53/DOMPurify)
+(Apache-2.0). Their full unmodified license notices are retained in `docs/licenses/`.
+Source distributions resolve these components from the committed npm lockfile; binary
+redistributions must also retain these notices.
+
 ## Runtime dependencies
 
 Tauri and its Rust dependencies retain their individual license notices recorded in Cargo.lock

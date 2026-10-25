@@ -22,7 +22,11 @@ pub struct Workspace {
 impl Workspace {
     pub fn new(root: PathBuf) -> Self {
         let log = Log::new(&root);
-        log.info("Startup version=0.1.0 publisher=KiaroSama");
+        log.info(concat!(
+            "Startup version=",
+            env!("CARGO_PKG_VERSION"),
+            " publisher=KiaroSama"
+        ));
         Self {
             root,
             source: None,
@@ -36,16 +40,17 @@ impl Workspace {
         }
     }
     pub fn active(&mut self) -> Result<bool, String> {
-        if self.cancel_pending && self.child.is_some() {
-            if let Some(path) = self.run.as_ref().filter(|path| path.is_dir()) {
-                File::create(path.join("cancel.request")).map_err(|e| e.to_string())?;
-            }
+        if self.cancel_pending
+            && self.child.is_some()
+            && let Some(path) = self.run.as_ref().filter(|path| path.is_dir())
+        {
+            File::create(path.join("cancel.request")).map_err(|e| e.to_string())?;
         }
-        if let Some(child) = self.child.as_mut() {
-            if let Some(code) = child.try_wait().map_err(|e| e.to_string())? {
-                self.log.info(&format!("Worker exit={code}"));
-                self.child = None;
-            }
+        if let Some(child) = self.child.as_mut()
+            && let Some(code) = child.try_wait().map_err(|e| e.to_string())?
+        {
+            self.log.info(&format!("Worker exit={code}"));
+            self.child = None;
         }
         Ok(self.child.is_some())
     }
@@ -72,11 +77,15 @@ impl Workspace {
         let source = self.source.as_ref().ok_or("Open a document first.")?;
         let pages = parse_pages(&selection, self.total)?;
         fs::create_dir_all(self.root.join("outputs")).map_err(|e| e.to_string())?;
-        let directory = self.root.join("outputs").join(format!(
-            "ocr_{}_{}",
-            Utc::now().format("%Y%m%d-%H%M%S-%f"),
-            std::process::id()
-        ));
+        let recovered = document::recovery(&self.root, source, &selection, &mode)?;
+        let resume = recovered["resume"].as_str().map(PathBuf::from);
+        let directory = resume.clone().unwrap_or_else(|| {
+            self.root.join("outputs").join(format!(
+                "ocr_{}_{}",
+                Utc::now().format("%Y%m%d-%H%M%S-%f"),
+                std::process::id()
+            ))
+        });
         let diagnostics = self.root.join("logs").join(format!(
             "worker_{}.log",
             Utc::now().format("%Y%m%d-%H%M%S-%f")
@@ -88,7 +97,17 @@ impl Workspace {
             .map_err(|e| e.to_string())?;
         let child = document::command(&self.root, "ocr.py")
             .arg(source)
-            .args(["--mode", &mode, "--page-selection", &selection, "--run-dir"])
+            .args([
+                "--mode",
+                &mode,
+                "--page-selection",
+                &selection,
+                if resume.is_some() {
+                    "--resume-dir"
+                } else {
+                    "--run-dir"
+                },
+            ])
             .arg(&directory)
             .stdout(file.try_clone().map_err(|e| e.to_string())?)
             .stderr(file)
@@ -102,19 +121,24 @@ impl Workspace {
         self.cancel_pending = false;
         self.child = Some(child);
         self.run = Some(directory);
+        self.log.info(if resume.is_some() {
+            "Resuming verified page checkpoints"
+        } else {
+            "New document job"
+        });
         self.started = Instant::now();
         self.poll()
     }
     pub fn cancel(&mut self) -> Result<(), String> {
-        if self.child.is_some() {
-            if let Some(path) = &self.run {
-                self.cancel_pending = true;
-                if path.is_dir() {
-                    File::create(path.join("cancel.request")).map_err(|e| e.to_string())?;
-                }
-                self.log
-                    .info("Cancellation requested; checkpoints retained");
+        if self.child.is_some()
+            && let Some(path) = &self.run
+        {
+            self.cancel_pending = true;
+            if path.is_dir() {
+                File::create(path.join("cancel.request")).map_err(|e| e.to_string())?;
             }
+            self.log
+                .info("Cancellation requested; checkpoints retained");
         }
         Ok(())
     }

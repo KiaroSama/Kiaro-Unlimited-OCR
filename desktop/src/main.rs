@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod document;
+mod file_drop;
+#[cfg(test)]
+mod file_drop_tests;
 mod logging;
 mod workspace;
 use serde_json::Value;
@@ -41,7 +44,7 @@ fn preview_page(page: u32, state: tauri::State<'_, State>) -> Result<Value, Stri
     drop(guard);
     document::preview(&root, &source, page)
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn start_run(
     selection: String,
     mode: String,
@@ -88,6 +91,7 @@ fn main() {
     }
     let app = tauri::Builder::default()
         .manage(Mutex::new(Workspace::new(root)))
+        .on_webview_event(file_drop::handle)
         .invoke_handler(tauri::generate_handler![
             choose_document,
             open_document,
@@ -113,21 +117,19 @@ fn main() {
             event: tauri::WindowEvent::CloseRequested { ref api, .. },
             ..
         } = event
+            && let Ok(mut guard) = handle.state::<State>().lock()
+            && guard.active().unwrap_or(true)
         {
-            if let Ok(mut guard) = handle.state::<State>().lock() {
-                if guard.active().unwrap_or(true) {
-                    guard.closing = true;
-                    let _ = guard.cancel();
-                    api.prevent_close();
-                }
-            }
+            guard.closing = true;
+            let _ = guard.cancel();
+            api.prevent_close();
         }
-        if let tauri::RunEvent::MainEventsCleared = event {
-            if let Ok(mut guard) = handle.state::<State>().lock() {
-                if guard.closing && !guard.active().unwrap_or(true) {
-                    handle.exit(0);
-                }
-            }
+        if let tauri::RunEvent::MainEventsCleared = event
+            && let Ok(mut guard) = handle.state::<State>().lock()
+            && guard.closing
+            && !guard.active().unwrap_or(true)
+        {
+            handle.exit(0);
         }
     });
 }

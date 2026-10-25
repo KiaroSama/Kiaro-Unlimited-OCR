@@ -26,19 +26,17 @@ impl Log {
         Self(Mutex::new(result.ok()))
     }
     pub fn info(&self, message: &str) {
-        if let Ok(mut guard) = self.0.lock() {
-            if let Some(file) = guard.as_mut() {
-                if let Err(error) = writeln!(
-                    file,
-                    "[{} UTC] [INFO] [DESKTOP] {}",
-                    Utc::now().format("%Y-%m-%d %H:%M:%S"),
-                    message
-                )
-                .and_then(|_| file.flush())
-                {
-                    eprintln!("Desktop log write failed: {error}");
-                }
-            }
+        if let Ok(mut guard) = self.0.lock()
+            && let Some(file) = guard.as_mut()
+            && let Err(error) = writeln!(
+                file,
+                "[{} UTC] [INFO] [DESKTOP] {}",
+                Utc::now().format("%Y-%m-%d %H:%M:%S"),
+                message
+            )
+            .and_then(|_| file.flush())
+        {
+            eprintln!("Desktop log write failed: {error}");
         }
     }
 }

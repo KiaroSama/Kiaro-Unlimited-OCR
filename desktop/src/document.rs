@@ -40,6 +40,24 @@ pub fn wait(child: &mut Child, seconds: u64) -> Result<std::process::ExitStatus,
 }
 
 pub fn preview(root: &Path, source: &Path, page: u32) -> Result<Value, String> {
+    adapter(root, source, &["--page".into(), page.to_string()])
+}
+
+pub fn recovery(root: &Path, source: &Path, selection: &str, mode: &str) -> Result<Value, String> {
+    adapter(
+        root,
+        source,
+        &[
+            "--job".into(),
+            "--selection".into(),
+            selection.into(),
+            "--mode".into(),
+            mode.into(),
+        ],
+    )
+}
+
+fn adapter(root: &Path, source: &Path, arguments: &[String]) -> Result<Value, String> {
     std::fs::create_dir_all(root.join(".tmp")).map_err(|e| e.to_string())?;
     let stamp = format!(
         "preview-{}-{}.json",
@@ -51,8 +69,7 @@ pub fn preview(root: &Path, source: &Path, page: u32) -> Result<Value, String> {
         let file = File::create(&output).map_err(|e| e.to_string())?;
         let mut child = command(root, "document_bridge.py")
             .arg(source)
-            .arg("--page")
-            .arg(page.to_string())
+            .args(arguments)
             .stdout(file)
             .stderr(Stdio::null())
             .spawn()
