@@ -99,9 +99,14 @@ const update = (value: Snapshot) => {
 const poll = async () => {
   if (polling) return;
   polling = true;
-  try { update(await invoke<Snapshot>('poll_run')); }
+  try {
+    if (busy || element<HTMLDetailsElement>('monitor').open) {
+      const snapshot = await invoke<Snapshot>('poll_run');
+      if (busy) update(snapshot); else updateMonitor(snapshot);
+    }
+  }
   catch (error) { status(String(error), true); }
-  finally { polling = false; if (busy) window.setTimeout(() => void poll(), 400); }
+  finally { polling = false; window.setTimeout(() => void poll(), busy ? 400 : 1000); }
 };
 input('filename').onkeydown = async event => {
   if (event.key !== 'Enter' || busy) return;
@@ -129,7 +134,6 @@ const start = async (fresh = false) => {
   status('Checking document identity and saved progress…');
   try {
     update(await invoke<Snapshot>('start_run', {selection: input('selection').value, mode: element<HTMLSelectElement>('mode').value, processing:element<HTMLSelectElement>('processing').value, turbo:input('turbo').checked, fresh}));
-    void poll();
   } catch (error) { setBusy(false); status(String(error), true); }
 };
 button('start').onclick = () => start();
@@ -150,3 +154,4 @@ document.addEventListener('keydown', event => {
   if(event.code==='Space' && busy){event.preventDefault();button('pause').click();}
   if(event.key==='Enter' && !busy){event.preventDefault();void start();}
 });
+void poll();

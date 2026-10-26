@@ -74,9 +74,15 @@ a small image cache is retained. Page ranges, Base/Gundam and Stop/save remain a
   older explicit two-page jobs can resume through the Python CLI with `--chunk-size 2 --max-length 8192`.
 - **Turbo** batches selected MoE expert operations on CUDA at runtime. Original BF16 weights and
   downloaded model source remain unchanged; this is not quantization or a different checkpoint.
-- The collapsible terminal-style monitor shows labeled CPU/GPU/power bars, available clocks and
-  RAM/VRAM/swap readings from this Windows system. Hardware samples refresh asynchronously every2s;
-  missing sensors display a dash, never a fabricated value. Power bars use the reported device limit.
+- The collapsible terminal-style monitor samples Windows independently of OCR, including loading,
+  pause and stopped states. CPU is whole-system busy time over a one-second interval. GPU is the
+  busiest WDDM engine on the named NVIDIA adapter, summed across its processes, as in Task Manager's
+  overall GPU value (not a selected 3D graph or NVIDIA kernel-busy percentage). Dedicated GPU memory
+  comes from Windows; RAM is total minus available, and Commit is system committed memory / limit,
+  not pagefile usage. Binary units are GiB/MiB. CPU MHz is nominal/base frequency, not effective speed.
+  Power and graphics clocks remain NVIDIA sensors. Sample age over five seconds or unavailable
+  counters show a dash; no old OCR snapshot is shown as live. Sampling windows and Task Manager's
+  refresh setting can still cause short-lived differences. Power bars use the reported device limit.
   Its60-row processing stream separates observed elapsed time, page, block type, excerpt and token
   rate. It follows the bottom only while you are already there; hover reveals a longer excerpt.
   Times/rates describe UI observation, not exact block-completion timestamps. Token throughput

@@ -4,7 +4,9 @@ mod document;
 mod file_drop;
 #[cfg(test)]
 mod file_drop_tests;
+mod hardware;
 mod logging;
+mod windows_metrics;
 mod workspace;
 use serde_json::Value;
 use std::{path::PathBuf, sync::Mutex};
@@ -125,6 +127,11 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Cannot initialize desktop workspace");
     app.run(move |handle, event| {
+        if let tauri::RunEvent::Exit = event
+            && let Ok(mut guard) = handle.state::<State>().lock()
+        {
+            guard.close_hardware();
+        }
         if let tauri::RunEvent::WindowEvent {
             event: tauri::WindowEvent::CloseRequested { ref api, .. },
             ..

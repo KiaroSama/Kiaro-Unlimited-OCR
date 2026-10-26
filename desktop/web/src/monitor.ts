@@ -24,12 +24,16 @@ function resource(key:string, value:unknown, suffix:string, percentage:unknown, 
 
 export function updateMonitor(snapshot:Snapshot) {
   const metrics = snapshot.document?.metrics;
-  const hardware = metrics?.monitor || {};
+  const sample = snapshot.hardware;
+  const fresh = valid(sample?.sampled_at) && Date.now()-sample.sampled_at >= 0 && Date.now()-sample.sampled_at < 5000;
+  const hardware = fresh ? sample! : {};
+  get('monitor-sample').textContent = fresh ? 'LIVE · 1 s' : 'Unavailable';
+  get('monitor-values').title = [sample?.gpu_name, sample?.cpu_source, sample?.gpu_source, sample?.error, sample?.sensor_error].filter(Boolean).join(' · ');
   resource('cpu',hardware.cpu,'%',hardware.cpu,`${number(hardware.cpu_mhz,0)} MHz`);
   resource('gpu',hardware.gpu,'%',hardware.gpu,`${number(hardware.gpu_mhz,0)} MHz`);
   const powerPercent = valid(hardware.power) && valid(hardware.power_limit) && hardware.power_limit > 0 ? hardware.power/hardware.power_limit*100 : null;
   resource('power',hardware.power,' W',powerPercent,`/ ${number(hardware.power_limit,0)} W`);
-  get('memory-values').textContent = `RAM ${number(hardware.ram_used)} / ${number(hardware.ram_total)} GB   swap ${number(hardware.swap_used)} / ${number(hardware.swap_total)} GB`;
+  get('memory-values').textContent = `RAM ${number(hardware.ram_used)} / ${number(hardware.ram_total)} GiB · Commit ${number(hardware.commit_used)} / ${number(hardware.commit_total)} GiB`;
   get('vram-values').textContent = `VRAM ${number(hardware.vram_used,0)} / ${number(hardware.vram_total,0)} MiB`;
   get('monitor-phase').textContent = metrics?.paused ? 'PAUSED' : snapshot.metadata.status.toUpperCase();
   get('monitor-status').textContent = `[unlimited-ocr] ${metrics?.paused?'paused':snapshot.metadata.status} · ${metrics?.tokens || 0} tokens`;

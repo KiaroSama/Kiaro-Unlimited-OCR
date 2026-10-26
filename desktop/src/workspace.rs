@@ -17,17 +17,20 @@ pub struct Workspace {
     started: Instant,
     pub closing: bool,
     cancel_pending: bool,
-    pub log: Log,
+    pub log: std::sync::Arc<Log>,
+    hardware: crate::hardware::Hardware,
 }
 impl Workspace {
     pub fn new(root: PathBuf) -> Self {
-        let log = Log::new(&root);
+        let log = std::sync::Arc::new(Log::new(&root));
         log.info(concat!(
             "Startup version=",
             env!("CARGO_PKG_VERSION"),
             " publisher=KiaroSama"
         ));
+        let hardware = crate::hardware::Hardware::new(log.clone());
         Self {
+            hardware,
             root,
             source: None,
             total: 0,
@@ -38,6 +41,9 @@ impl Workspace {
             cancel_pending: false,
             log,
         }
+    }
+    pub fn close_hardware(&mut self) {
+        self.hardware.close();
     }
     pub fn active(&mut self) -> Result<bool, String> {
         if self.cancel_pending
@@ -221,7 +227,7 @@ impl Workspace {
         };
         Ok(
             json!({"active":active,"metadata":meta,"text":text,"seconds":self.started.elapsed().as_secs(),
-            "document":document,"output": self.run.as_ref().map(|p| p.to_string_lossy()), "closing":self.closing}),
+            "document":document,"hardware":self.hardware.read(),"output": self.run.as_ref().map(|p| p.to_string_lossy()), "closing":self.closing}),
         )
     }
 }

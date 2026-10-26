@@ -26,12 +26,12 @@ def contracts():
     print("PASS document bridge", flush=True)
 
 
-def render(gpu=False):
+def render(gpu=False, metrics_only=False, executable=None):
     import subprocess
     import psutil
     import urllib.request
     from playwright.sync_api import sync_playwright
-    executable = ROOT / "desktop/target/release/kiaro-unlimited-ocr.exe"
+    executable = executable or ROOT / "desktop/target/release/kiaro-unlimited-ocr.exe"
     env = os.environ.copy()
     env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--remote-debugging-port=19327 --remote-debugging-address=127.0.0.1"
     env["TEMP"] = env["TMP"] = str(ROOT / ".tmp")
@@ -60,6 +60,31 @@ def render(gpu=False):
             page = browser.contexts[0].pages[0]
             page.set_default_timeout(15000)
             page.wait_for_selector("#empty-open")
+            if metrics_only:
+                first = page.evaluate("async () => await window.__TAURI__.core.invoke('poll_run')")
+                assert 'hardware' in first, 'No live hardware snapshot while idle'
+                page.locator('#monitor').evaluate('(e)=>{e.open=true}')
+                page.wait_for_function("async () => (await window.__TAURI__.core.invoke('poll_run')).hardware?.sampled_at > 0", timeout=15000)
+                first = page.evaluate("async () => await window.__TAURI__.core.invoke('poll_run')")
+                page.evaluate('(stamp)=>{window.firstSample=stamp}', first['hardware']['sampled_at'])
+                page.wait_for_function("async () => (await window.__TAURI__.core.invoke('poll_run')).hardware?.sampled_at > window.firstSample", timeout=15000)
+                sample = page.evaluate("async () => (await window.__TAURI__.core.invoke('poll_run')).hardware")
+                assert sample['cpu'] is not None and sample['ram_used'] > 0, sample
+                assert sample['gpu_source'] == 'Windows busiest engine', sample
+                assert sample['gpu_name'] and sample['vram_used'] > 0, sample
+                page.wait_for_function("() => document.querySelector('#cpu-value').textContent.includes('%')")
+                reference_script = "$c=Get-Counter -Counter '\\Processor Information(_Total)\\% Processor Time','\\GPU Adapter Memory(*)\\Dedicated Usage','\\Memory\\Committed Bytes' -SampleInterval 1 -MaxSamples 2; @($c[-1].CounterSamples | Select-Object InstanceName,CookedValue) | ConvertTo-Json -Compress"
+                reference = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-Command', reference_script], capture_output=True, text=True, encoding='utf-8', timeout=15, stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+                assert reference.returncode == 0, reference.stderr
+                independent = json.loads(reference.stdout)
+                sample = page.evaluate("async () => (await window.__TAURI__.core.invoke('poll_run')).hardware")
+                dedicated = next(item['CookedValue']/2**20 for item in independent if item['InstanceName'] == sample['gpu_adapter'])
+                assert abs(sample['vram_used']-dedicated) < 128, (sample['vram_used'], dedicated)
+                print('PASS idle native hardware refresh', json.dumps(sample), flush=True)
+                print('Independent Windows counter comparison', json.dumps(independent), flush=True)
+                page.screenshot(path=str(ROOT / 'outputs/desktop-hardware-live.png'))
+                browser.close()
+                return
             text_sizes = page.evaluate("""() => Object.fromEntries(
               ['.empty p','.empty kbd','.language-tags span','.live'].map(selector =>
                 [selector, parseFloat(getComputedStyle(document.querySelector(selector)).fontSize)]))""")
@@ -116,6 +141,10 @@ def render(gpu=False):
                         frozen = paused['tokens']
                         stable = page.evaluate(invoke, ['poll_run', {}])['document']['metrics']
                         assert stable['paused'] and stable['tokens'] == frozen, (paused, stable)
+                        stamp = page.evaluate(invoke, ['poll_run', {}])['hardware']['sampled_at']
+                        page.evaluate('(stamp)=>{window.pausedHardwareStamp=stamp}', stamp)
+                        page.wait_for_function("async () => (await window.__TAURI__.core.invoke('poll_run')).hardware.sampled_at > window.pausedHardwareStamp", timeout=15000)
+                        assert page.evaluate(invoke, ['poll_run', {}])['document']['metrics']['tokens'] == frozen
                         page.evaluate(invoke, ['pause_run', {'paused':False}])
                         pause_checked = True
                     if len(meta['completed_pages']) >= 1 and not cancelled:
@@ -193,6 +222,9 @@ def render(gpu=False):
               const {updateMonitor}=await import('./monitor.js');
               const blocks=Array.from({length:65},(_,i)=>({label:i%4?'text':'equation',text:i%3?'The generated sequence retains the image reference.':'متن فارسی نمونه برای بررسی نمایش راست به چپ',boxes:[]}));
               const snapshot={output:'monitor-test',active:true,seconds:20.7,metadata:{status:'processing',completed_pages:[],selected_pages:[7],percent:0},text:'',closing:false,document:{pages:[{page:7,text:'',blocks}],metrics:{tokens:8455,tokens_per_second:14.2,monitor:{cpu:9.7,cpu_mhz:2468,gpu:10.6,gpu_mhz:705,power:20,power_limit:285,ram_used:18.2,ram_total:32,swap_used:4.4,swap_total:8,vram_used:6928,vram_total:12282}}}};
+              snapshot.hardware={...snapshot.document.metrics.monitor,commit_used:22,commit_total:40,sampled_at:Date.now(),gpu_name:'Presentation fixture',gpu_source:'Windows busiest engine'};
+              window.realInvoke=window.__TAURI__.core.invoke;
+              window.__TAURI__.core.invoke=(name,args)=>name==='poll_run'?Promise.resolve(snapshot):window.realInvoke(name,args);
               updateMonitor(snapshot);updateMonitor(snapshot);window.monitorFixture=snapshot;
             }""")
             assert page.locator('.monitor-event').count() == 60
@@ -201,12 +233,15 @@ def render(gpu=False):
             assert page.locator('#cpu-meter').get_attribute('aria-valuenow') == '9.7'
             assert page.locator('.event-rate').first.inner_text() == '14.2 tok/s'
             page.screenshot(path=str(ROOT / 'outputs/desktop-monitor.png'))
-            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.document.metrics.paused=true;s.document.metrics.monitor={cpu:0};updateMonitor(s);}""")
+            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.hardware.sampled_at=Date.now()-10000;updateMonitor(s);} """)
+            assert page.locator('#cpu-value').inner_text() == '—'
+            assert page.locator('#monitor-sample').inner_text() == 'Unavailable'
+            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.document.metrics.paused=true;s.hardware={cpu:0,sampled_at:Date.now()};updateMonitor(s);}""")
             assert page.locator('#cpu-value').inner_text() == '0.0%'
             assert page.locator('#gpu-value').inner_text() == '—'
             assert 'paused' in page.locator('#monitor-status').inner_text()
             page.screenshot(path=str(ROOT / "outputs/desktop-workspace.png"))
-            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.document.metrics.paused=false;s.document.metrics.monitor={cpu:9.7,cpu_mhz:2468,gpu:10.6,gpu_mhz:705,power:20,power_limit:285,ram_used:18.2,ram_total:32,swap_used:4.4,swap_total:8,vram_used:6928,vram_total:12282};updateMonitor(s);}""")
+            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.document.metrics.paused=false;s.hardware={cpu:9.7,cpu_mhz:2468,gpu:10.6,gpu_mhz:705,power:20,power_limit:285,ram_used:18.2,ram_total:32,commit_used:22,commit_total:40,vram_used:6928,vram_total:12282,sampled_at:Date.now()};updateMonitor(s);}""")
             page.set_viewport_size({"width": 900, "height": 700})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             assert page.locator('.language-tags span').first.evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)') == 12
@@ -247,10 +282,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--gpu", action="store_true")
+    parser.add_argument("--metrics", action="store_true")
+    parser.add_argument("--executable", type=Path)
     args = parser.parse_args()
+    if args.metrics:
+        render(metrics_only=True, executable=args.executable)
+        return
     contracts()
     if args.render or args.gpu:
-        render(gpu=args.gpu)
+        render(gpu=args.gpu, executable=args.executable)
 
 
 if __name__ == "__main__":

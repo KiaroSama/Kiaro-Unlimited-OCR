@@ -28,15 +28,15 @@
 </main>
 <details id="monitor"><summary>System monitor &amp; processing events</summary>
   <section id="monitor-values" aria-label="System resources">
-    <div class="monitor-heading"><strong>System load</strong><span id="monitor-phase">READY</span><span>2 s</span></div>
-    <div class="resource-row cpu"><span>CPU</span><div class="resource-meter" id="cpu-meter" role="meter" aria-label="CPU utilization" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Unavailable"><i></i></div><span id="cpu-value">—</span><span id="cpu-detail">— MHz</span></div>
+    <div class="monitor-heading"><strong>System load</strong><span id="monitor-phase">READY</span><span id="monitor-sample">Waiting…</span></div>
+    <div class="resource-row cpu"><span>CPU</span><div class="resource-meter" id="cpu-meter" role="meter" aria-label="CPU utilization" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Unavailable"><i></i></div><span id="cpu-value">—</span><span id="cpu-detail" title="Nominal/base frequency; not Task Manager effective speed">— MHz</span></div>
     <div class="resource-row gpu"><span>GPU</span><div class="resource-meter" id="gpu-meter" role="meter" aria-label="GPU utilization" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Unavailable"><i></i></div><span id="gpu-value">—</span><span id="gpu-detail">— MHz</span></div>
     <div class="resource-row power"><span>GPU W</span><div class="resource-meter" id="power-meter" role="meter" aria-label="GPU power relative to device limit" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Unavailable"><i></i></div><span id="power-value">—</span><span id="power-detail">/ — W</span></div>
-    <div class="memory-line" id="memory-values">RAM — / — GB · swap — / — GB</div>
+    <div class="memory-line" id="memory-values">RAM — / — GiB · Commit — / — GiB</div>
     <div class="memory-line" id="vram-values">VRAM — / — MiB</div>
   </section>
   <div class="monitor-events"><div class="event-heading"><span>Processing stream</span><span>Observed time · rate</span></div><div id="block-events" tabindex="0" aria-label="Recent layout blocks"></div><p id="monitor-empty">Waiting for document blocks…</p></div>
   <div id="monitor-status" role="status">[unlimited-ocr] ready · 0 tokens</div>
 </details>
-<footer class="run-footer"><div class="status-line"><span id="state-pill" class="state-pill">Ready</span><span id="status" role="status" aria-live="polite">Open a document to begin.</span><button id="results" class="text-link" disabled>Open saved results ↗</button><strong id="percent">0%</strong></div><progress id="progress" value="0" max="100" aria-label="Completed selected pages"></progress><div class="footer-note"><span>Completed pages are saved automatically. Stopping keeps your progress.</span><span>KiaroSama · v0.5.0</span></div></footer>
+<footer class="run-footer"><div class="status-line"><span id="state-pill" class="state-pill">Ready</span><span id="status" role="status" aria-live="polite">Open a document to begin.</span><button id="results" class="text-link" disabled>Open saved results ↗</button><strong id="percent">0%</strong></div><progress id="progress" value="0" max="100" aria-label="Completed selected pages"></progress><div class="footer-note"><span>Completed pages are saved automatically. Stopping keeps your progress.</span><span>KiaroSama · v0.5.1</span></div></footer>
 </body></html>
