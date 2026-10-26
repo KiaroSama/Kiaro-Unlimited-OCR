@@ -165,6 +165,17 @@ def render(gpu=False):
             assert page.locator('#start').evaluate('(e)=>getComputedStyle(e).backgroundColor') == 'rgb(8, 123, 255)'
             page.locator('#monitor summary').dispatch_event('click')
             assert page.locator('#monitor').evaluate('(e)=>e.open')
+            page.wait_for_function("() => document.body.classList.contains('monitor-open')")
+            assert page.locator('#mode option[value="persian"]').count() == 1
+            geometry = page.evaluate("""() => {
+              const main=document.querySelector('main').getBoundingClientRect();
+              const monitor=document.querySelector('#monitor').getBoundingClientRect();
+              const source=document.querySelector('.source-panel').getBoundingClientRect();
+              return {width:innerWidth,mainRight:main.right,monitorLeft:monitor.left,ratio:source.width/main.width};
+            }""")
+            if geometry['width'] >= 1200:
+                assert geometry['mainRight'] <= geometry['monitorLeft']+1, geometry
+                assert abs(geometry['ratio']-.41) < .01, geometry
             assert page.locator('#recognized pre code').inner_text().strip() == 'print(1)'
             assert page.locator('#recognized img,#recognized script,#recognized a,#recognized [onerror]').count() == 0
             assert not page.evaluate('window.pwned || false')

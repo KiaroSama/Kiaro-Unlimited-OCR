@@ -28,6 +28,35 @@ No character-accuracy percentage is claimed: no complete verified ground-truth t
 available. Three pages do not establish coverage of all794pages. Do not use the output as a source
 of medication/dosing decisions or as an unreviewed replacement for the original study material.
 
+## Precise RTL mode (0.4)
+
+On2026-10-26 a second, user-supplied five-page scanned document was tested locally with the
+same original BF16 checkpoint and CUDA. Oversized PDF point dimensions now rasterize within a
+3000pixel long-edge/12million-pixel budget instead of failing the former20million-pixel guard.
+
+The separate `persian` mode reads right-column-first, using contiguous regions whose horizontal
+boundaries lie in sparse-ink whitespace. Unlike a brightest-row cut, it does not bisect a photograph
+to meet a target crop height. Words and numbers are returned by the model without dictionary repair.
+Source files, raster images and recognized private text are not included in this repository.
+
+Exploratory source-page3 runs measured149.0seconds for full-page Base and79.11seconds for
+regional reading, but used different expert kernels, so they do not establish a valid speedup.
+A subsequent matched-kernel Base attempt kept generating repetitive output and hit the360second
+owner ceiling; it was terminated, not counted as completed. The final precise run with the retained
+Turbo implementation completed the same page in63.0seconds (6928.5MiB peak allocated VRAM).
+This is a bounded success versus a timed-out baseline, not a matched completed-run speed ratio.
+Regional reading eliminated the observed
+invented English header and duplicate paragraph, read the source1cm/10cm values correctly, and
+preserved TSC1/TSC2. This is one page, with different segmentation and output length—not a universal
+throughput or accuracy claim. Several Persian words,
+figure references and occasional Latin fragments were still wrong. The mode improves this scan;
+it does **not** make unattended medical transcription reliable. Compare every important value with
+its source. A complete verified transcription is still needed for a defensible character-error rate.
+
+A tested native expert-kernel prototype had inconsistent timing and only short-output parity; it
+was not adopted. The existing CUDA Turbo path remains unchanged. Original weights are not quantized,
+replaced or fine-tuned, and the Apple reference's263tokens/s has not been reproduced.
+
 ## Warnings and cancellation
 
 The attention-mask warning was traced to upstream single-batch generation kwargs. The adapter now

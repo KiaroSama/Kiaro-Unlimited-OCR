@@ -59,5 +59,9 @@ Test-only CDP is enabled by the owner process environment, not in normal applica
 The legacy Qt workspace remains as a source-level rollback during migration; the default launcher
 and console workspace action use the Rust executable. Matching unfinished jobs now resume automatically when Start is pressed. Recovery uses content
 SHA256, ordered pages, mode, context length and model revision; complete-page hashes are checked.
+The separate Persian mode also binds a region-schema version. It divides two-column scans right-first
+at source whitespace boundaries, maps boxes back to page coordinates and accumulates partial output;
+only all-region completion commits a page. Precise rasterization is bounded to3000pixels/12Mpixels.
+Base/Gundam retain legacy200DPI for accepted pages, with bounded fallback for oversized dimensions.
 A job-level OS lock rejects concurrent writers and releases after a crash. Incomplete pages restart,
 not token-level KV state. Native Rust file-drop uses the same validation as the Open action.

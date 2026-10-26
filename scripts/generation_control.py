@@ -17,10 +17,12 @@ class GenerationControl:
         self.original = model.generate
         self.cancelled = False
         self.page = 0
+        self.region_prefix, self.region = '', None
         self.pages = []
         self.tokens = []
         self.first = True
         self.last_write = 0.0
+        self.last_progress = time.monotonic()
         self.old_handler = None
         self.decode_started = None
         self.paused_seconds = 0.0
@@ -56,6 +58,10 @@ class GenerationControl:
             self.decode_started = time.monotonic()
         self.tokens.extend(value.reshape(-1).tolist())
         now = time.monotonic()
+        if now - self.last_progress >= 15:
+            import logging
+            logging.getLogger('ocr').info('Generation page=%d tokens=%d', self.page, len(self.tokens))
+            self.last_progress = now
         if now - self.last_write >= 0.4:
             self.flush()
             self.last_write = now
@@ -73,6 +79,9 @@ class GenerationControl:
         if not self.pages:
             return
         raw = self.tokenizer.decode(self.tokens, skip_special_tokens=False) if self.tokens else ''
+        if self.region is not None:
+            from image_regions import transform_raw
+            raw = self.region_prefix + transform_raw(raw, self.region)
         pages = split_pages(raw, self.pages)
         if len(self.pages) == 1:
             self.store.partial(self.page, raw)
@@ -107,7 +116,9 @@ class GenerationControl:
         signal.signal(signal.SIGINT, lambda *_: setattr(self, 'cancelled', True))
         return self
 
-    def reset(self, page):
+    def reset(self, page, keep_regions=False):
+        if not keep_regions:
+            self.region_prefix, self.region = '', None
         stats = self.statistics()
         self.prior_tokens, self.prior_decode = stats['tokens'], stats['decode_seconds']
         self.pages = page if isinstance(page, list) else [page]

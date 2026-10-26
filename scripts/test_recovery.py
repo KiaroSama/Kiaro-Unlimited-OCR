@@ -26,6 +26,9 @@ def main():
         assert find_run(root, key) == directory
         assert find_run(root, identity(source, [1, 3], 'base', 8192)) is None
         assert find_run(root, identity(source, [3, 1], 'gundam', 8192)) is None
+        precise = identity(source, [3, 1], 'persian', 8192)
+        assert precise['region_schema'] == 1 and find_run(root, precise) is None
+        assert 'region_schema' not in key
         assert find_run(root, identity(source, [3, 1], 'base', 4096)) is None
         with JobLock(root, key):
             try:

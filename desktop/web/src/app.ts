@@ -118,6 +118,7 @@ if (window.__TAURI__) {
   });
   void window.__TAURI__.event.listen<string>('source-error', event => status(event.payload, true));
 }
+element<HTMLDetailsElement>('monitor').ontoggle = () => document.body.classList.toggle('monitor-open', element<HTMLDetailsElement>('monitor').open);
 button('open').onclick = choose;
 button('empty-open').onclick = choose;
 button('previous').onclick = () => void preview(Number(input('page').value) - 1);

@@ -1675,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "kiaro-unlimited-ocr"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "rfd",

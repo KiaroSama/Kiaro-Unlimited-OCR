@@ -78,8 +78,8 @@ impl Workspace {
         if self.active()? {
             return Err("An OCR worker is already running.".into());
         }
-        if !["base", "gundam"].contains(&mode.as_str()) {
-            return Err("Choose Base or Gundam.".into());
+        if !["base", "gundam", "persian"].contains(&mode.as_str()) {
+            return Err("Choose Base, Gundam or Persian precise.".into());
         }
         let source = self.source.as_ref().ok_or("Open a document first.")?;
         let pages = parse_pages(&selection, self.total)?;

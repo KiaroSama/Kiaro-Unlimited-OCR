@@ -18,9 +18,12 @@ def identity(source: Path, pages: list[int], mode: str, max_length: int) -> dict
     after = source.stat()
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise ValueError('Source changed while computing its recovery identity.')
-    return {'sha256': digest, 'bytes': after.st_size, 'selected_pages': pages,
-            'mode': mode, 'max_length': max_length, 'model_revision': MODEL_REVISION,
-            'raster_dpi': 200, 'schema': 1}
+    key = {'sha256': digest, 'bytes': after.st_size, 'selected_pages': pages,
+           'mode': mode, 'max_length': max_length, 'model_revision': MODEL_REVISION,
+           'raster_dpi': 200, 'schema': 1}
+    if mode == 'persian':
+        key['region_schema'] = 1
+    return key
 
 
 def validate_checkpoint(directory: Path, job: dict) -> dict:

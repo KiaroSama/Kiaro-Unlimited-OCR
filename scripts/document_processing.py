@@ -42,10 +42,9 @@ def process_chunks(source, tokenizer, model, store, control, max_length, root, c
             images = []
             for number in selected:
                 page = document[number-1]
-                if page.rect.width * page.rect.height * (200/72)**2 > 20000000:
-                    raise ValueError('PDF page exceeds 20 million raster pixels at 200 DPI.')
+                from image_regions import raster_page
                 path = Path(tmp) / f'page-{number}.png'
-                page.get_pixmap(dpi=200, alpha=False).save(path)
+                raster_page(page).save(path)
                 images.append(str(path))
             store.begin(selected[0])
             control.reset(selected)

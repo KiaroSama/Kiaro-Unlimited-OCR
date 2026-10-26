@@ -177,7 +177,11 @@ def process_file(source: Path, tokenizer: Any, model: Any, mode: str,
         page_start = time.monotonic()
         store.begin(number)
         control.reset(number)
-        raw = infer_image(tokenizer, model, image, page_dir, selected_mode, max_length)
+        if selected_mode == 'persian':
+            from image_regions import recognize_regions
+            raw = recognize_regions(image, tokenizer, model, page_dir, control, max_length)
+        else:
+            raw = infer_image(tokenizer, model, image, page_dir, selected_mode, max_length)
         if control.stop_requested():
             store.partial(number, raw)
             raise InterruptedError("Cancelled; completed and partial pages are saved.")
@@ -205,10 +209,9 @@ def process_file(source: Path, tokenizer: Any, model: Any, mode: str,
                             if control.stop_requested():
                                 raise InterruptedError("Cancelled between pages.")
                             page = document[number - 1]
-                            if page.rect.width * page.rect.height * (200 / 72) ** 2 > 20000000:
-                                raise ValueError("PDF page exceeds 20 million raster pixels at 200 DPI.")
+                            from image_regions import raster_page
                             image = Path(tmp) / "page.png"
-                            pixmap = page.get_pixmap(dpi=200, alpha=False)
+                            pixmap = raster_page(page, bounded=mode == 'persian')
                             pixmap.save(str(image))
                             del pixmap
                             run_page(image, number, mode)
@@ -233,7 +236,7 @@ def main() -> int:
     """Validate arguments, run offline CUDA OCR and propagate failures."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", nargs="?", type=Path, help="Local image or PDF path")
-    parser.add_argument("--mode", choices=("base", "gundam"), default="base")
+    parser.add_argument("--mode", choices=("base", "gundam", "persian"), default="base")
     parser.add_argument("--pages", type=int, default=0, help="PDF page limit; 0 means all")
     parser.add_argument("--max-length", type=int, default=None, help="Total context tokens: default 8192, automatic multi-page 32768")
     parser.add_argument("--check", action="store_true", help="Check local model and CUDA without loading weights")

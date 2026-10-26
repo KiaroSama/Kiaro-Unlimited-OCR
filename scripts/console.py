@@ -58,13 +58,13 @@ def main():
                                 break
                             except ValueError as error:
                                 say(str(error), "error")
-                    say("Modes: [1] base (lower VRAM)  [2] gundam (small text / tiled)", "mode")
+                    say("Modes: [1] base  [2] gundam (tiled)  [3] Persian precise (RTL regions)", "mode")
                     while True:
                         mode_choice = input("Mode [1]: ").strip() or "1"
-                        if mode_choice in ("1", "2", "base", "gundam"):
+                        if mode_choice in ("1", "2", "3", "base", "gundam", "persian"):
                             break
-                        say("Choose 1/base or 2/gundam.", "error")
-                    mode = "gundam" if mode_choice in ("2", "gundam") else "base"
+                        say("Choose 1/base, 2/gundam or 3/persian.", "error")
+                    mode = "persian" if mode_choice in ("3", "persian") else "gundam" if mode_choice in ("2", "gundam") else "base"
                     options = [str(source), "--mode", mode, "--page-selection", selection]
                 elif choice == "3":
                     options = ["--check"]

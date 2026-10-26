@@ -45,7 +45,7 @@ def main() -> int:
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument('--job', action='store_true')
     parser.add_argument('--selection', default='')
-    parser.add_argument('--mode', choices=('base', 'gundam'), default='base')
+    parser.add_argument('--mode', choices=('base', 'gundam', 'persian'), default='base')
     parser.add_argument('--processing', choices=('pagewise', 'multi'), default='pagewise')
     parser.add_argument('--turbo', action='store_true')
     args = parser.parse_args()

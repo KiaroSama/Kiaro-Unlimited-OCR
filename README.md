@@ -135,7 +135,14 @@ pwsh -NoProfile -File .\run.ps1 -InputPath ".\samples\upstream-paper.pdf" -Pages
 ```
 
 For small text in images, use `-Mode gundam`. Default `base` uses less GPU memory.
-PDF pages are rasterized at200DPI and processed serially in the chosen Base/Gundam mode.
+For two-column Persian scans, choose **Persian · precise RTL** or `-Mode persian`.
+It reads the right column first in whitespace-bounded regions using the same original model,
+then maps layout boxes back to the source page. It does not guess spelling or medical numbers.
+Use page-by-page reading; multi-page groups remain Base-only. A page is saved as complete only
+when every region finishes; stopping retains the current partial page.
+Precise-mode rasterization targets200DPI, capped at3000pixels on the longest edge and12million
+pixels. Base/Gundam retain their200DPI input for previously accepted pages; oversized page dimensions
+use the bounded fallback instead of failing. This changes image preparation, not the original PDF.
 Use `-PageSelection "1,3,10-20"` for inclusive ranges, comma lists and ordered deduplication.
 Persian/Arabic digits and Persian commas are accepted; empty selection means all pages.
 `-Pages N` additionally caps the selected list; zero means no cap. Original source page numbers

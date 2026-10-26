@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)][string]$InputPath = '',
-    [ValidateSet('base', 'gundam')][string]$Mode = 'base',
+    [ValidateSet('base', 'gundam', 'persian')][string]$Mode = 'base',
     [ValidateRange(0, 100000)][int]$Pages = 0,
     [string]$PageSelection = '',
     [ValidateRange(1024, 32768)][int]$MaxLength = 8192,
