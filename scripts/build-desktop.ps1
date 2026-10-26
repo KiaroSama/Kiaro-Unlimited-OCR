@@ -16,14 +16,6 @@ try {
     New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
     $env:CARGO_BUILD_JOBS = '2'
     Write-Event 'Starting desktop build version=0.5.1'
-    if (-not $SkipCompile) {
-        & npm --prefix (Join-Path $root 'desktop/web') ci --ignore-scripts --no-audit --no-fund
-        if ($LASTEXITCODE) { throw 'Frontend dependency installation failed.' }
-        & npm --prefix (Join-Path $root 'desktop/web') run build
-        if ($LASTEXITCODE) { throw 'Frontend compilation failed.' }
-        & cargo build --release --locked --manifest-path (Join-Path $root 'desktop/Cargo.toml') -j 2
-        if ($LASTEXITCODE) { throw 'Rust compilation failed.' }
-    }
     $identityFile = Join-Path $root 'signing/identity.json'
     if ($CreateSigningIdentity) {
         if (Test-Path -LiteralPath $identityFile) { throw 'Signing identity already exists; no replacement performed.' }
@@ -35,8 +27,17 @@ try {
     }
     if (-not (Test-Path -LiteralPath $identityFile)) { throw 'No project signing identity. Use -CreateSigningIdentity only after approving creation.' }
     $identity = Get-Content -LiteralPath $identityFile -Raw -Encoding utf8 | ConvertFrom-Json
-    $certificate = Get-Item -LiteralPath ("Cert:\CurrentUser\My\" + $identity.thumbprint)
-    if (-not $certificate.HasPrivateKey) { throw 'Signing certificate has no private key.' }
+    . (Join-Path $PSScriptRoot 'signing.ps1')
+    $certificate = Resolve-SigningCertificate -IdentityFile $identityFile
+    Write-Event 'Approved signing key verified before compilation; existing identity preserved'
+    if (-not $SkipCompile) {
+        & npm --prefix (Join-Path $root 'desktop/web') ci --ignore-scripts --no-audit --no-fund
+        if ($LASTEXITCODE) { throw 'Frontend dependency installation failed.' }
+        & npm --prefix (Join-Path $root 'desktop/web') run build
+        if ($LASTEXITCODE) { throw 'Frontend compilation failed.' }
+        & cargo build --release --locked --manifest-path (Join-Path $root 'desktop/Cargo.toml') -j 2
+        if ($LASTEXITCODE) { throw 'Rust compilation failed.' }
+    }
     $executable = Join-Path $root 'desktop/target/release/kiaro-unlimited-ocr.exe'
     $signature = Set-AuthenticodeSignature -LiteralPath $executable -Certificate $certificate -HashAlgorithm SHA256
     $verified = Get-AuthenticodeSignature -LiteralPath $executable
@@ -56,4 +57,6 @@ try {
 } catch {
     Write-Event ("Build failed: " + $_.Exception.Message)
     throw
+} finally {
+    if ($certificate) { $certificate.Dispose() }
 }

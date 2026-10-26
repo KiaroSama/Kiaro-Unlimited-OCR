@@ -38,6 +38,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -I -X utf8 scripts/check_source.py
           exit $LASTEXITCODE
+      - name: Signing metadata contracts
+        run: pwsh -NoProfile -NonInteractive -File scripts/test-signing.ps1
       - name: Rust format and unit contracts
         run: |
           rustup update stable --no-self-update

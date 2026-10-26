@@ -47,7 +47,12 @@ hf download baidu/Unlimited-OCR --revision 8249d20b2822a7d8a4c22c8d8c9069b5ac36b
 pwsh -NoProfile -File scripts/build-desktop.ps1 -CreateSigningIdentity
 ```
 
-Later builds omit `-CreateSigningIdentity`. Cargo/npm retrieve dependencies during build; OCR itself
+Later builds omit `-CreateSigningIdentity`. The build checks access to the approved signing key
+before compiling. Local metadata retains the existing CNG key locator; if only the certificate-store
+association disappears, the public certificate can reconnect to that same key without creating or
+exporting a key. A missing key, mismatched certificate or different Windows account fails explicitly.
+Keep a secure Windows account/system backup: a nonexportable key cannot be restored after actual
+key loss from the public certificate alone. Cargo/npm retrieve dependencies during build; OCR itself
 runs offline. The executable remains under `desktop/target/release` and must stay within this
 installation. `run.ps1` does not build, install software or generate certificates automatically.
 Self-signed Authenticode identifies the signer and protects integrity, but Windows warnings remain;
