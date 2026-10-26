@@ -32,7 +32,25 @@ def main() -> None:
         assert meta["status"] == "cancelled" and meta["completed_pages"] == [3]
         assert "سلام دنیا" in (Path(directory) / "result.md").read_text(encoding="utf-8")
         assert (Path(directory) / "page-0001.partial.md").read_text(encoding="utf-8") == "متن ناتمام"
-    print("PASS selection and checkpoint contracts")
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    from runtime_metrics import Monitor
+    fake = SimpleNamespace(virtual_memory=lambda: SimpleNamespace(used=2**30,total=4*2**30),
+        cpu_percent=lambda interval: 0, cpu_freq=lambda: SimpleNamespace(current=2400),
+        swap_memory=lambda: SimpleNamespace(used=0,total=2**30))
+    with patch.dict(sys.modules, {'psutil':fake}), patch('runtime_metrics.subprocess.run',
+            return_value=SimpleNamespace(returncode=0,stdout='0,100,12000,20,285,705')):
+        monitor=Monitor();monitor.sample()
+        assert monitor.value['cpu']==0 and monitor.value['gpu']==0
+        assert monitor.value['cpu_mhz']==2400 and monitor.value['gpu_mhz']==705
+        assert monitor.value['swap_used']==0 and monitor.value['power_limit']==285
+    with patch.dict(sys.modules, {'psutil':fake}), patch('runtime_metrics.subprocess.run',
+            return_value=SimpleNamespace(returncode=0,stdout='N/A,nan,12000,-1,N/A,N/A')):
+        monitor.sample()
+        assert monitor.value['gpu'] is None and monitor.value['vram_used'] is None
+        assert monitor.value['power'] is None and monitor.value['gpu_mhz'] is None
+    monitor.close()
+    print("PASS selection, checkpoint and optional hardware contracts")
 
 
 if __name__ == "__main__":

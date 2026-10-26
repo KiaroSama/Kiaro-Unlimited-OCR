@@ -74,8 +74,13 @@ a small image cache is retained. Page ranges, Base/Gundam and Stop/save remain a
   older explicit two-page jobs can resume through the Python CLI with `--chunk-size 2 --max-length 8192`.
 - **Turbo** batches selected MoE expert operations on CUDA at runtime. Original BF16 weights and
   downloaded model source remain unchanged; this is not quantization or a different checkpoint.
-- The collapsible monitor shows actual CPU/RAM/NVIDIA usage and recent detected blocks. Missing
-  readings display a dash. Token throughput measures active decode, not model loading or paused time.
+- The collapsible terminal-style monitor shows labeled CPU/GPU/power bars, available clocks and
+  RAM/VRAM/swap readings from this Windows system. Hardware samples refresh asynchronously every2s;
+  missing sensors display a dash, never a fabricated value. Power bars use the reported device limit.
+  Its60-row processing stream separates observed elapsed time, page, block type, excerpt and token
+  rate. It follows the bottom only while you are already there; hover reveals a longer excerpt.
+  Times/rates describe UI observation, not exact block-completion timestamps. Token throughput
+  measures active decode, not model loading or paused time. No Apple-specific core readings are invented.
 
 The reference recording uses a warmed Apple MLX/Core ML implementation, not this Windows BF16
 runtime. A short warmed32token comparison measured4.91s baseline versus3.85s Turbo with identical

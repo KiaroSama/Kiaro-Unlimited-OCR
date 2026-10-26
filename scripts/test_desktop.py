@@ -119,6 +119,8 @@ def render(gpu=False):
                         page.evaluate(invoke, ['pause_run', {'paused':False}])
                         pause_checked = True
                     if len(meta['completed_pages']) >= 1 and not cancelled:
+                        page.locator('#monitor').evaluate('(e)=>{e.open=true}')
+                        page.wait_for_function("() => document.body.classList.contains('monitor-open')")
                         page.screenshot(path=str(ROOT / 'outputs/desktop-live.png'))
                         page.dispatch_event('#cancel', 'click')
                         cancelled = True
@@ -170,7 +172,7 @@ def render(gpu=False):
             assert page.locator('.topbar').evaluate('(e)=>getComputedStyle(e).backgroundColor') == 'rgb(44, 42, 41)'
             page.mouse.move(0,0)
             assert page.locator('#start').evaluate('(e)=>getComputedStyle(e).backgroundColor') == 'rgb(8, 123, 255)'
-            page.locator('#monitor summary').dispatch_event('click')
+            page.locator('#monitor').evaluate('(e)=>{e.open=true}')
             assert page.locator('#monitor').evaluate('(e)=>e.open')
             page.wait_for_function("() => document.body.classList.contains('monitor-open')")
             assert page.locator('#mode option[value="persian"]').count() == 1
@@ -186,7 +188,25 @@ def render(gpu=False):
             assert page.locator('#recognized pre code').inner_text().strip() == 'print(1)'
             assert page.locator('#recognized img,#recognized script,#recognized a,#recognized [onerror]').count() == 0
             assert not page.evaluate('window.pwned || false')
+            # Presentation fixture, not a claimed real generation or hardware benchmark.
+            page.evaluate("""async () => {
+              const {updateMonitor}=await import('./monitor.js');
+              const blocks=Array.from({length:65},(_,i)=>({label:i%4?'text':'equation',text:i%3?'The generated sequence retains the image reference.':'متن فارسی نمونه برای بررسی نمایش راست به چپ',boxes:[]}));
+              const snapshot={output:'monitor-test',active:true,seconds:20.7,metadata:{status:'processing',completed_pages:[],selected_pages:[7],percent:0},text:'',closing:false,document:{pages:[{page:7,text:'',blocks}],metrics:{tokens:8455,tokens_per_second:14.2,monitor:{cpu:9.7,cpu_mhz:2468,gpu:10.6,gpu_mhz:705,power:20,power_limit:285,ram_used:18.2,ram_total:32,swap_used:4.4,swap_total:8,vram_used:6928,vram_total:12282}}}};
+              updateMonitor(snapshot);updateMonitor(snapshot);window.monitorFixture=snapshot;
+            }""")
+            assert page.locator('.monitor-event').count() == 60
+            assert page.locator('#cpu-value').inner_text() == '9.7%'
+            assert page.locator('#gpu-detail').inner_text() == '705 MHz'
+            assert page.locator('#cpu-meter').get_attribute('aria-valuenow') == '9.7'
+            assert page.locator('.event-rate').first.inner_text() == '14.2 tok/s'
+            page.screenshot(path=str(ROOT / 'outputs/desktop-monitor.png'))
+            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.document.metrics.paused=true;s.document.metrics.monitor={cpu:0};updateMonitor(s);}""")
+            assert page.locator('#cpu-value').inner_text() == '0.0%'
+            assert page.locator('#gpu-value').inner_text() == '—'
+            assert 'paused' in page.locator('#monitor-status').inner_text()
             page.screenshot(path=str(ROOT / "outputs/desktop-workspace.png"))
+            page.evaluate("""async () => {const {updateMonitor}=await import('./monitor.js');const s=window.monitorFixture;s.document.metrics.paused=false;s.document.metrics.monitor={cpu:9.7,cpu_mhz:2468,gpu:10.6,gpu_mhz:705,power:20,power_limit:285,ram_used:18.2,ram_total:32,swap_used:4.4,swap_total:8,vram_used:6928,vram_total:12282};updateMonitor(s);}""")
             page.set_viewport_size({"width": 900, "height": 700})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             assert page.locator('.language-tags span').first.evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)') == 12

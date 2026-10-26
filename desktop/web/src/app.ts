@@ -1,5 +1,6 @@
 import { invoke, type DocumentInfo, type Snapshot } from './bridge.js';
 import { renderMarkdown } from './markdown.js';
+import { updateMonitor } from './monitor.js';
 import { loadPages, showPage, updateBoxes } from './source_pages.js';
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const button = (id: string) => element<HTMLButtonElement>(id);
@@ -91,9 +92,7 @@ const update = (value: Snapshot) => {
   button('pause').textContent = metrics?.paused ? 'Resume' : 'Pause';
   button('pause').dataset.paused = String(!!metrics?.paused);
   button('restart').disabled = value.active || !documentInfo;
-  const monitor = metrics?.monitor || {};
-  element('monitor-values').textContent = `CPU ${monitor.cpu ?? '—'}% · RAM ${monitor.ram_used ?? '—'}/${monitor.ram_total ?? '—'} GB · GPU ${monitor.gpu ?? '—'}% · VRAM ${monitor.vram_used ?? '—'}/${monitor.vram_total ?? '—'} MiB · ${monitor.power ?? '—'} W`;
-  element('block-events').textContent = pages.flatMap(p => (p.blocks || []).map(b => `p${p.page}  ${b.label}  ${b.text.slice(0,100)}`)).slice(-60).join('\n');
+  updateMonitor(value);
   const currentPage = pages.filter(p=>!p.complete).at(-1)?.page || meta.current_page;
   if (currentPage && autoPage !== currentPage) { autoPage = currentPage; void preview(autoPage); }
 };
