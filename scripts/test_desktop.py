@@ -60,6 +60,13 @@ def render(gpu=False):
             page = browser.contexts[0].pages[0]
             page.set_default_timeout(15000)
             page.wait_for_selector("#empty-open")
+            text_sizes = page.evaluate("""() => Object.fromEntries(
+              ['.empty p','.empty kbd','.language-tags span','.live'].map(selector =>
+                [selector, parseFloat(getComputedStyle(document.querySelector(selector)).fontSize)]))""")
+            print('Native reader text sizes', text_sizes, flush=True)
+            assert text_sizes['.empty p'] >= 14, text_sizes
+            assert all(size >= 12 for size in text_sizes.values()), text_sizes
+            page.screenshot(path=str(ROOT / 'outputs/desktop-empty.png'))
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             invoke = "async ([name,args]) => await window.__TAURI__.core.invoke(name,args)"
@@ -182,6 +189,8 @@ def render(gpu=False):
             page.screenshot(path=str(ROOT / "outputs/desktop-workspace.png"))
             page.set_viewport_size({"width": 900, "height": 700})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            assert page.locator('.language-tags span').first.evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)') == 12
+            assert page.locator('.live').evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)') == 12
             page.screenshot(path=str(ROOT / "outputs/desktop-compact.png"))
             assert not errors, errors
             page.keyboard.press("Tab")

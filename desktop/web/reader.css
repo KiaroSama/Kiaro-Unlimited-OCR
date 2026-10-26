@@ -56,6 +56,8 @@ main{grid-template-columns:41% 59%}
 #block-events{height:140px;overflow:auto;margin:10px 0 0;font:12px/1.6 Consolas,monospace;white-space:pre-wrap;color:#b8c2cb}
 .empty h1,.empty h2{color:var(--text)}
 .empty p,.empty kbd{color:#b8b6b4}
+.empty p{font-size:14px}
+.empty kbd,.language-tags span,.live{font-size:12px}
 .text-mark{color:var(--muted)}
 .language-tags span{color:#b8b6b4;border-color:#555352}
 .document-glyph{background:#353332;border-color:#777472}
