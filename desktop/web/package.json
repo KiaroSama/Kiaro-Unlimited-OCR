@@ -12,7 +12,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "dompurify": "^3.4.17",
+    "dompurify": "^3.5.0",
     "marked": "^18.1.1"
   }
 }
